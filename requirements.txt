@@ -1,0 +1,10 @@
+requests
+sympy
+pandas
+seaborn
+numpy
+matplotlib
+scipy
+xlrd>=2.0.1
+tqdm
+jupyter-server
