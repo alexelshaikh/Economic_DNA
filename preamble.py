@@ -103,6 +103,73 @@ def synthesis_cost_updated(year,
     )
     return cost
 
+def calc_index_size_per_object_access(
+    n_objects: int,
+    n_primers: int,
+    oligo_size: int,
+    primer_size: int,
+    obj_size_mb: int | None = None,
+    obj_size_bytes: int | None = None,
+    base_synthesis_cost: float = 0.004897040777491498,
+):
+
+    # Require a size
+    if obj_size_bytes is None and obj_size_mb is None:
+        return {}
+
+    if obj_size_bytes is None:
+        obj_size_bytes = obj_size_mb * 1_000_000
+
+    # Total data to encode (4 bases per byte)
+    total_data_bases = n_objects * obj_size_bytes * 4
+
+    # Base payload (no index yet)
+    max_payload_no_index = oligo_size - primer_size
+    if max_payload_no_index <= 0:
+        return {}  # can't even fit one base
+
+    # Objects per primer family that must be distinguished
+    objects_per_primer = math.ceil(n_objects / n_primers)
+
+    # Try the smallest index size that (a) provides enough object IDs per primer
+    # and (b) leaves positive payload.
+    for index_size in range(0, max_payload_no_index):
+        payload_size = oligo_size - primer_size - index_size
+        if payload_size <= 0:
+            break  # no room left for data
+
+        capacity_per_primer = 4 ** index_size
+        if capacity_per_primer < objects_per_primer:
+            continue  # not enough IDs per primer yet
+
+        # Feasible: compute totals and costs for this index size
+        total_num_oligos = math.ceil(total_data_bases / payload_size)
+        synthesis_cost_per_oligo = base_synthesis_cost * oligo_size
+        total_synthesis_cost = synthesis_cost_per_oligo * total_num_oligos
+
+        return {
+            "Index Size": index_size,
+            "Payload Size": payload_size,
+            "Number of Oligos": total_num_oligos,
+            "Bytes per Oligo": payload_size / 4,
+            "Synthesis Cost Per Oligo": synthesis_cost_per_oligo,
+            "Total Synthesis Cost": total_synthesis_cost,
+            "Oligo Size": oligo_size,
+            "Primer Size": primer_size,
+            "Total Data Size (MBs)": (obj_size_bytes * n_objects) / 1e6,
+            "Primer Size %": primer_size / oligo_size,
+            "Index Size %": index_size / oligo_size,
+            "Payload Size %": payload_size / oligo_size,
+            "Primer+Index Sizes %": (primer_size + index_size) / oligo_size,
+            # clarity fields
+            "Objects per Primer (required to distinguish)": objects_per_primer,
+            "Index Capacity per Primer (4^index)": capacity_per_primer,
+            "Addressability": "per-object",
+        }
+
+    # No workable index size found (ran out of payload before addressability)
+    return {}
+
 def calc_index_size(n_objects: int,
                     n_primers: int,
                     oligo_size: int,
@@ -205,13 +272,13 @@ def get_df_fig2():
 def sequencing_cost_updated(year, drop_rate=0.4791, anchor_year=2000):
     # 1) original “baseline” point:
     baseline_year         = 2011.5
-    baseline_cost_per_run = 35.036    # USD per run at baseline_year
+    baseline_cost_per_mb_coefficient = 35.036
     multiplier            = 4         # 4 DNA abses per byte
 
     # 2) roll that baseline back or forward to anchor using the original rate
     orig_rate = 0.4791
     cost_at_anchor = (
-        baseline_cost_per_run
+        baseline_cost_per_mb_coefficient
         * np.exp(-orig_rate * (anchor_year - baseline_year))
         * multiplier
     )

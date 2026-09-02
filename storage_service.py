@@ -1,10 +1,35 @@
+from numbers import Real
+
 from sympy import Symbol, exp
 from models import model3
 import numpy as np
 
+
+def _validate_common(n, k, obj_size_mb, d, device_durability=None):
+    numeric_values = {
+        "n": n,
+        "k": k,
+        "obj_size_mb": obj_size_mb,
+        "d": d,
+    }
+    for name, value in numeric_values.items():
+        if isinstance(value, Real) and value < 0:
+            raise ValueError(f"{name} must not be negative")
+    if isinstance(obj_size_mb, Real) and obj_size_mb == 0:
+        raise ValueError("obj_size_mb must be greater than zero")
+    if device_durability is not None and device_durability <= 0:
+        raise ValueError("device durability must be greater than zero")
+
+
+def _validate_decline(name, value):
+    if not 0 <= value < 1:
+        raise ValueError(f"{name} must be at least 0 and below 1")
+
 def _synthesis_cost(year,
                            drop_rate: float = 0.1671,
                            anchor_year: float = 2000):
+    """Return synthesis USD/MB using a continuous exponential coefficient."""
+    _validate_decline("drop_rate", drop_rate)
     # 1) your true historical baseline:
     orig_rate              = 0.1671     # fixed, from the original fit
     baseline_year          = 2000
@@ -26,15 +51,17 @@ def _synthesis_cost(year,
     )
     return cost
 def _sequencing_cost(year, drop_rate=0.4791, anchor_year=2000):
+    """Return modeled sequencing USD/MB using a continuous coefficient."""
+    _validate_decline("drop_rate", drop_rate)
     # 1) original “baseline” point:
     baseline_year        = 2011.5
-    baseline_cost_per_run = 35.036    # USD per run at baseline_year
+    baseline_cost_per_mb_coefficient = 35.036
     multiplier            = 4         # your original ×4 factor
 
     # 2) roll that baseline back or forward to your anchor using the *original* rate
     orig_rate = 0.4791
     cost_at_anchor = (
-        baseline_cost_per_run
+        baseline_cost_per_mb_coefficient
         * np.exp(-orig_rate * (anchor_year - baseline_year))
         * multiplier
     )
@@ -42,6 +69,7 @@ def _sequencing_cost(year, drop_rate=0.4791, anchor_year=2000):
     return cost_at_anchor * exp(-drop_rate * (year - anchor_year))
 
 def dna(n=1000, k=10, obj_size_mb=100, start_year=2025, d=100, device_durability=1000, synthesis_anchor_year=2025, synthesis_drop_rate=0.1671, sequencing_anchor_year=2025, sequencing_drop_rate=0.4791):
+    _validate_common(n, k, obj_size_mb, d, device_durability)
     _t = Symbol('t', integer=True)
     dna_model = model3.CostModel("DNA")
     dna_model.cost_write = _synthesis_cost(_t, anchor_year=synthesis_anchor_year, drop_rate=synthesis_drop_rate)
@@ -57,6 +85,8 @@ def dna(n=1000, k=10, obj_size_mb=100, start_year=2025, d=100, device_durability
     return dna_model
 
 def azure(n=1000, k=10, obj_size_mb=100, start_year=2025, d=100, drop_rate=0.1):
+    _validate_common(n, k, obj_size_mb, d)
+    _validate_decline("drop_rate", drop_rate)
     t = Symbol('t', integer=True)
 
     # ----------------------------------------------------------------------
@@ -96,6 +126,8 @@ def azure(n=1000, k=10, obj_size_mb=100, start_year=2025, d=100, drop_rate=0.1):
 
 
 def amazon(n=1000, k=10, obj_size_mb=100, start_year=2025, d=100, drop_rate=0.1):
+    _validate_common(n, k, obj_size_mb, d)
+    _validate_decline("drop_rate", drop_rate)
     t = Symbol('t', integer=True)
 
     # ----------------------------------------------------------------------
@@ -134,6 +166,8 @@ def amazon(n=1000, k=10, obj_size_mb=100, start_year=2025, d=100, drop_rate=0.1)
 
 
 def tape_on_premise(improv_rate_per_year=0.1, write_cost_per_mb=0.00000639, read_cost_per_mb=0, maint_cost_per_mb_per_year=0.00000671, device_durability_years=30, d=100, n=1000, k=10, obj_size_mb=100, start_year=2025, model_name=None):
+    _validate_common(n, k, obj_size_mb, d, device_durability_years)
+    _validate_decline("improv_rate_per_year", improv_rate_per_year)
     _t = Symbol('t', integer=True)
 
     tape_on_premise = model3.CostModel(f"Tape_on_premise_{improv_rate_per_year}") if model_name is None else model3.CostModel(model_name)
@@ -174,6 +208,13 @@ def tape_on_premise_updated(
     device_durability_years: int       = 30,
     model_name: str | None             = None
 ):
+    _validate_common(n, k, obj_size_mb, d, device_durability_years)
+    for name, value in (
+        ("media_decline_per_year", media_decline_per_year),
+        ("hardware_decline_per_year", hardware_decline_per_year),
+        ("energy_decline_per_year", energy_decline_per_year),
+    ):
+        _validate_decline(name, value)
     t = Symbol('t', integer=True)
 
     # --- Convert to per‐MB and per‐MB/yr ---

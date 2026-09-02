@@ -1,6 +1,65 @@
 # An Economic Analysis of DNA-based Data Storage Systems  
 ## Alex El-Shaikh, Bernhard Seeger, and Thomas Heinis
 
+## Interactive cost explorer
+
+The repository includes a journalist-facing web calculator in `streamlit_app.py`. It uses a
+validated, numeric implementation of the paper model and exposes archive size, average asset
+size, annual retrieval, start year, retention horizon, discounting, decline assumptions, and
+technology selection. DNA synthesis and sequencing base-year costs are editable, and a custom
+storage service can combine per-TB, per-asset, retrieval, recurring, decline, and replacement
+assumptions. Results include lifecycle, start-year, synthesis, and sequencing charts, crossover
+years, source metadata, and CSV/PNG/SVG downloads.
+
+Run it locally:
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+The paper baseline is 1 TB stored as 1,000 assets of 1 GB each, with 1% of the assets retrieved
+per year for 100 years. A 100-year horizon includes the start year through start year + 99.
+
+### Docker Compose
+
+Start the app locally from the repository directory:
+
+```bash
+docker compose up -d --build
+```
+
+Open `http://localhost:8501`. Later starts can omit `--build` unless the source or dependencies
+changed. View status and logs, restart the app, or stop the stack with:
+
+```bash
+docker compose ps
+docker compose logs -f app
+docker compose restart app
+docker compose down
+```
+
+Set `APP_PORT` in `.env` to use another local port.
+
+### VPS deployment
+
+Copy `.env.example` to `.env`, replace `dna-cost.example.org` with a domain whose DNS points to
+the VPS, and run:
+
+```bash
+docker compose --profile production up -d --build
+```
+
+Caddy proxies the app and manages HTTPS automatically. The VPS must allow inbound TCP 80/443
+and UDP 443. Keep `.env` out of version control. For embargoed access, configure Streamlit OIDC
+or an authentication gateway before making the DNS record public.
+
+Run all automated checks with:
+
+```bash
+python -m unittest discover -v
+```
+
 This repository contains the code and data accompanying the paper **“An Economic Analysis of DNA-based Data Storage Systems.”** It provides fully reproducible notebooks for all main-text and supplementary figures, along with scripts and utilities to fetch and cache datasets.
 
 > **TL;DR:**  
@@ -26,7 +85,7 @@ This repository contains the code and data accompanying the paper **“An Econom
 
 ## 🧰 Requirements
 
-You will need **Python 3.8+** and the packages listed in `requirements.txt`. Install them with:
+You will need **Python 3.10+** and the packages listed in `requirements.txt`. Install them with:
 
 ```bash
 pip install -r requirements.txt

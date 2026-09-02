@@ -1,0 +1,16 @@
+.git
+.idea
+.venv
+__pycache__
+*.pyc
+.ipynb_checkpoints
+data
+figs
+tests
+Figures.ipynb
+Figures_Supplementary.ipynb
+test.ipynb
+preamble.py
+storage_service.py
+models
+README.md

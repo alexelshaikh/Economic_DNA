@@ -1,0 +1,63 @@
+metadata:
+  model_version: "1.2.0"
+  last_reviewed: "2025-07-01"
+  currency: "constant 2025 USD"
+  horizon_convention: "A horizon of d years includes start_year through start_year + d - 1."
+  disclaimer: "Scenario model, not a price forecast or purchasing quote."
+
+sources:
+  dna_synthesis:
+    label: "Historical synthesis-cost fit used in the paper"
+    url: "https://github.com/alexelshaikh/Economic_DNA"
+  dna_sequencing:
+    label: "NHGRI DNA Sequencing Costs"
+    url: "https://www.genome.gov/about-genomics/fact-sheets/DNA-Sequencing-Costs-Data"
+  amazon:
+    label: "Amazon S3 pricing"
+    url: "https://aws.amazon.com/s3/pricing/"
+  azure:
+    label: "Azure Blob Storage pricing"
+    url: "https://azure.microsoft.com/en-us/pricing/details/storage/blobs/"
+  tape:
+    label: "Tape assumptions used in the paper model"
+    url: "https://github.com/alexelshaikh/Economic_DNA"
+
+dna:
+  editable_cost_base_year: 2026
+  editable_synthesis_usd_per_mb: 16573.838543736347
+  editable_sequencing_usd_per_mb: 0.13475734873958314
+  synthesis_baseline_year: 2000
+  synthesis_baseline_usd_per_base: 0.3193
+  synthesis_historical_decay_coefficient: 0.1671
+  sequencing_baseline_year: 2011.5
+  sequencing_baseline_usd_per_mb_coefficient: 35.036
+  sequencing_multiplier: 4.0
+  sequencing_historical_decay_coefficient: 0.4791
+  bases_per_byte: 4.0
+  bytes_per_mb: 1000000.0
+  durability_years: 1000
+
+custom_storage:
+  description: "User-defined storage service with per-capacity and per-asset charges."
+  cost_base_year: 2026
+
+amazon:
+  price_base_year: 2025
+  put_usd_per_request: 0.00005
+  bulk_restore_usd_per_request: 0.000025
+  bulk_retrieval_usd_per_mb: 0.00000244140625
+  storage_usd_per_mb_month: 0.000000966796875
+
+azure:
+  price_base_year: 2025
+  write_usd_per_request: 0.00001
+  read_usd_per_request: 0.0005
+  retrieval_usd_per_mb: 0.00001953125
+  storage_usd_per_mb_month: 0.000001953125
+
+tape:
+  price_base_year: 2025
+  media_usd_per_tb: 6.39
+  hardware_usd_per_tb: 6.86
+  energy_usd_per_tb_year: 0.05
+  durability_years: 30

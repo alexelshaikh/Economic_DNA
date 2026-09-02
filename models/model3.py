@@ -100,7 +100,9 @@ class CostModel:
     def _get_maintenance_sum(self):
         """
         maintenance_sum =
-          ∑_{t = start_year}^{start_year + d} [ cost_maint(t) * n * obj_size ].
+          ∑_{t = start_year}^{start_year + d - 1} [ cost_maint(t) * n * obj_size ].
+
+        ``d`` is the number of charged calendar years, not a year offset.
         """
         cm = self.cost_maint
         t = Symbol("t", integer=True)
@@ -116,12 +118,12 @@ class CostModel:
             term = cm
 
         return summation(term * self.n * self.obj_size,
-                         (t, self.start_year, self.start_year + self.d))
+                         (t, self.start_year, self.start_year + self.d - 1))
 
     def _get_read_sum(self):
         """
         read_sum =
-          ∑_{t = start_year}^{start_year + d} [ cost_read(t) * k * obj_size ].
+          ∑_{t = start_year}^{start_year + d - 1} [ cost_read(t) * k * obj_size ].
         """
         cr = self.cost_read
         t = Symbol("t", integer=True)
@@ -137,7 +139,7 @@ class CostModel:
 
         return summation(
             term * self.k * self.obj_size,
-            (t, self.start_year, self.start_year + self.d)
+            (t, self.start_year, self.start_year + self.d - 1)
         )
 
     def _get_replacement_cost(self):
@@ -197,7 +199,7 @@ class CostModel:
                         years = []
                         break
                 nxt = prev + lifetime
-                if nxt > window_end:
+                if nxt >= window_end:
                     break
                 years.append(nxt)
                 prev = nxt
@@ -215,7 +217,7 @@ class CostModel:
                 else:
                     lifetime_raw = rd(prev) if callable(rd) else rd.subs(t, prev)
                 next_expr = simplify(prev + lifetime_raw)
-                cond = next_expr <= (self.start_year + self.d)
+                cond = next_expr < (self.start_year + self.d)
                 pieces.append(Piecewise((cost_term(next_expr), cond), (0, True)))
                 prev = next_expr
             return Add(*pieces)
