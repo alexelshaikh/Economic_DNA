@@ -5,6 +5,7 @@ from io import BytesIO
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.graph_objects as go
+from matplotlib.ticker import StrMethodFormatter
 
 from .simulation import COMPONENTS, SimulationResult
 
@@ -180,6 +181,9 @@ def _figure_exports(fig: plt.Figure) -> dict[str, bytes]:
 def _finish_export_figure(fig: plt.Figure, ax: plt.Axes, metadata: dict[str, str]) -> None:
     ax.grid(axis="y", color="#e2e4e6", linewidth=0.8)
     ax.spines[["top", "right"]].set_visible(False)
+    if ax.get_yscale() == "log":
+        # Avoid MathText tick labels, which fail in some Streamlit/Matplotlib renderers.
+        ax.yaxis.set_major_formatter(StrMethodFormatter("{x:.0e}"))
     fig.text(
         0.01,
         0.01,

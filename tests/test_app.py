@@ -3,9 +3,15 @@ from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
 
+from economic_dna import Scenario
+
 
 class StreamlitAppTests(unittest.TestCase):
     APP_PATH = Path(__file__).resolve().parent.parent / "streamlit_app.py"
+
+    @staticmethod
+    def _submit_form(app: AppTest) -> None:
+        next(button for button in app.button if button.label == "Calculate scenario").click()
 
     def test_paper_baseline_renders_without_exceptions(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
@@ -37,17 +43,35 @@ class StreamlitAppTests(unittest.TestCase):
     def test_form_submission_recalculates_archive(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
         app.number_input(key="archive_value").set_value(2.0)
-        app.button(key="FormSubmitter:scenario_form-Calculate scenario").click()
+        self._submit_form(app)
         app.run()
         self.assertFalse(app.exception)
         archive_metric = next(metric for metric in app.metric if metric.label == "Archive")
         self.assertEqual(archive_metric.value, "2 TB")
 
+    def test_reset_to_paper_baseline_updates_form_widgets(self):
+        baseline = Scenario()
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        app.number_input(key="archive_value").set_value(2.0)
+        app.number_input(key="start_year_widget").set_value(2035)
+        app.checkbox(key="tech_tape").uncheck()
+        self._submit_form(app)
+        app.run()
+
+        app.button(key="reset_baseline").click()
+        app.run()
+
+        self.assertFalse(app.exception)
+        self.assertEqual(app.number_input(key="archive_value").value, baseline.archive_size_tb)
+        self.assertEqual(app.selectbox(key="archive_unit").value, "TB")
+        self.assertEqual(app.number_input(key="start_year_widget").value, baseline.start_year)
+        self.assertTrue(app.checkbox(key="tech_tape").value)
+
     def test_custom_storage_can_be_selected_and_named(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
         app.checkbox(key="tech_custom").check()
         app.text_input(key="custom_name").set_value("Test service")
-        app.button(key="FormSubmitter:scenario_form-Calculate scenario").click()
+        self._submit_form(app)
         app.run()
         self.assertFalse(app.exception)
         lowest_metric = next(metric for metric in app.metric if metric.label.startswith("Lowest:"))

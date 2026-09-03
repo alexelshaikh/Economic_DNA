@@ -140,6 +140,10 @@ WIDGET_KEYS = [
 ]
 
 
+def _default_projection_end(scenario: Scenario, query: dict[str, str]) -> int:
+    return min(2500, max(scenario.start_year + 25, int(query.get("projection_end", 2350))))
+
+
 def _query_mapping() -> dict[str, str]:
     return {key: str(value) for key, value in st.query_params.items()}
 
@@ -164,6 +168,72 @@ def _display_units(scenario: Scenario) -> tuple[float, str, float, str]:
     else:
         asset_value, asset_unit = scenario.average_asset_size_mb, "MB"
     return archive_value, archive_unit, asset_value, asset_unit
+
+
+def _widget_state_from_scenario(
+    scenario: Scenario, query: dict[str, str] | None = None
+) -> dict[str, bool | float | int | str]:
+    archive_value, archive_unit, asset_value, asset_unit = _display_units(scenario)
+    query = query or {}
+    return {
+        "archive_value": archive_value,
+        "archive_unit": archive_unit,
+        "asset_value": asset_value,
+        "asset_unit": asset_unit,
+        "retrieval": scenario.annual_retrieval_percent,
+        "start_year_widget": scenario.start_year,
+        "horizon": scenario.horizon_years,
+        "tech_dna": "DNA" in scenario.technologies,
+        "tech_amazon": "Amazon Deep Archive" in scenario.technologies,
+        "tech_azure": "Azure Blob Archive" in scenario.technologies,
+        "tech_tape": "Tape On-premise" in scenario.technologies,
+        "tech_custom": "Custom storage" in scenario.technologies,
+        "discount": scenario.discount_rate_percent,
+        "dna_cost_base_year": scenario.dna_cost_base_year,
+        "dna_synthesis_cost": scenario.dna_synthesis_cost_per_mb,
+        "dna_sequencing_cost": scenario.dna_sequencing_cost_per_mb,
+        "synthesis_decline": scenario.synthesis_decline_percent,
+        "sequencing_decline": scenario.sequencing_decline_percent,
+        "amazon_base_year": scenario.amazon_price_base_year,
+        "amazon_put_per_1000": scenario.amazon_put_usd_per_request * 1_000,
+        "amazon_restore_per_1000": scenario.amazon_bulk_restore_usd_per_request * 1_000,
+        "amazon_retrieval_per_tb": scenario.amazon_bulk_retrieval_usd_per_mb * 1_000_000,
+        "amazon_storage_per_tb_month": scenario.amazon_storage_usd_per_mb_month * 1_000_000,
+        "amazon_decline": scenario.amazon_decline_percent,
+        "azure_base_year": scenario.azure_price_base_year,
+        "azure_write_per_1000": scenario.azure_write_usd_per_request * 1_000,
+        "azure_read_per_1000": scenario.azure_read_usd_per_request * 1_000,
+        "azure_retrieval_per_tb": scenario.azure_retrieval_usd_per_mb * 1_000_000,
+        "azure_storage_per_tb_month": scenario.azure_storage_usd_per_mb_month * 1_000_000,
+        "azure_decline": scenario.azure_decline_percent,
+        "tape_base_year": scenario.tape_price_base_year,
+        "tape_media_per_tb": scenario.tape_media_usd_per_tb,
+        "tape_hardware_per_tb": scenario.tape_hardware_usd_per_tb,
+        "tape_energy_per_tb_year": scenario.tape_energy_usd_per_tb_year,
+        "tape_media_decline": scenario.tape_media_decline_percent,
+        "tape_hardware_decline": scenario.tape_hardware_decline_percent,
+        "tape_energy_decline": scenario.tape_energy_decline_percent,
+        "dna_durability": scenario.dna_durability_years,
+        "tape_durability": scenario.tape_durability_years,
+        "custom_name": scenario.custom_storage_name,
+        "custom_base_year": scenario.custom_cost_base_year,
+        "custom_write_tb": scenario.custom_write_cost_per_tb,
+        "custom_write_asset": scenario.custom_write_cost_per_asset,
+        "custom_storage_tb_year": scenario.custom_storage_cost_per_tb_year,
+        "custom_retrieval_tb": scenario.custom_retrieval_cost_per_tb,
+        "custom_retrieval_asset": scenario.custom_retrieval_cost_per_asset,
+        "custom_decline": scenario.custom_decline_percent,
+        "custom_replacement": scenario.custom_replacement_years,
+        "projection_end": _default_projection_end(scenario, query),
+        "log_scale": query.get("log_scale", "True").lower() == "true",
+    }
+
+
+def _reset_to_paper_baseline() -> None:
+    baseline_state = _widget_state_from_scenario(Scenario())
+    st.session_state.update({key: baseline_state[key] for key in WIDGET_KEYS})
+    st.session_state["form_generation"] = st.session_state.get("form_generation", 0) + 1
+    st.query_params.clear()
 
 
 def _money(value: float) -> str:
@@ -238,33 +308,33 @@ def _cached_dna_costs(scenario: Scenario, final_year: int) -> pd.DataFrame:
 
 
 initial = _initial_scenario()
-archive_value, archive_unit, asset_value, asset_unit = _display_units(initial)
 query = _query_mapping()
-default_projection_end = min(2500, max(initial.start_year + 25, int(query.get("projection_end", 2350))))
-default_log_scale = query.get("log_scale", "True").lower() == "true"
+for widget_key, default_value in _widget_state_from_scenario(initial, query).items():
+    st.session_state.setdefault(widget_key, default_value)
 
 with st.sidebar:
     st.header("Scenario")
-    if st.button("Reset to paper baseline", width="stretch"):
-        for key in WIDGET_KEYS:
-            st.session_state.pop(key, None)
-        st.query_params.clear()
-        st.rerun()
+    st.button(
+        "Reset to paper baseline",
+        key="reset_baseline",
+        on_click=_reset_to_paper_baseline,
+        width="stretch",
+    )
 
-    with st.form("scenario_form"):
+    form_key = f"scenario_form_{st.session_state.get('form_generation', 0)}"
+    with st.form(form_key):
         st.caption("Workload and time")
         col_a, col_b = st.columns([2, 1])
         with col_a:
             archive_input = st.number_input(
                 "Archive size",
                 min_value=0.001,
-                value=float(archive_value),
                 key="archive_value",
                 help="Total logical data stored in the collection, before DNA coding, redundancy, or provider replication.",
             )
         with col_b:
             archive_unit_input = st.selectbox(
-                "Unit", ["TB", "PB", "EB"], index=["TB", "PB", "EB"].index(archive_unit), key="archive_unit",
+                "Unit", ["TB", "PB", "EB"], key="archive_unit",
                 help="Decimal capacity unit: 1 PB = 1,000 TB and 1 EB = 1,000,000 TB.",
             )
 
@@ -273,26 +343,25 @@ with st.sidebar:
             asset_input = st.number_input(
                 "Average asset size",
                 min_value=0.001,
-                value=float(asset_value),
                 key="asset_value",
-                help="Average size of one file or object, such as one video master. It determines asset count and per-request charges.",
+                help="Average data object size. It determines object count.",
             )
         with col_b:
             asset_unit_input = st.selectbox(
-                "Unit ", ["MB", "GB"], index=["MB", "GB"].index(asset_unit), key="asset_unit",
+                "Unit ", ["MB", "GB"], key="asset_unit",
                 help="Unit used for the average size of one asset.",
             )
 
         time_col_a, time_col_b = st.columns(2)
         with time_col_a:
             start_year = st.number_input(
-                "Start year", min_value=2025, max_value=2500, value=initial.start_year,
+                "Start year", min_value=2025, max_value=2500,
                 key="start_year_widget", help="Calendar year in which the archive is first written.",
             )
         with time_col_b:
             horizon = st.number_input(
                 "Retention (years)", min_value=1, max_value=10_000,
-                value=initial.horizon_years, key="horizon",
+                key="horizon",
                 help="Number of charged storage years, including the start year.",
             )
 
@@ -300,13 +369,13 @@ with st.sidebar:
         with finance_col_a:
             retrieval = st.number_input(
                 "Annual retrieval (%)", min_value=0.0, max_value=10_000.0,
-                value=float(initial.annual_retrieval_percent), step=0.25, key="retrieval",
+                step=0.25, key="retrieval",
                 help="Expected share of the logical archive retrieved each year. 1% means reading 10 TB per year from a 1 PB archive.",
             )
         with finance_col_b:
             discount = st.number_input(
                 "Discount rate (%)", min_value=0.0, max_value=99.0,
-                value=float(initial.discount_rate_percent), step=0.25, key="discount",
+                step=0.25, key="discount",
                 help="Real rate used to discount future payments to the storage start year. Use 0 for undiscounted costs.",
             )
 
@@ -315,12 +384,12 @@ with st.sidebar:
         with chart_col_a:
             projection_end = st.number_input(
                 "Outlook end year", min_value=int(start_year), max_value=2500,
-                value=default_projection_end, key="projection_end",
-                help="Last hypothetical archive start year shown in the start-year outlook.",
+                key="projection_end",
+                help="Final archive start year included in the start-year outlook chart.",
             )
         with chart_col_b:
             log_scale = st.toggle(
-                "Log", value=default_log_scale, key="log_scale",
+                "Log", key="log_scale",
                 help="Recommended when technologies differ by several orders of magnitude.",
             )
 
@@ -329,51 +398,51 @@ with st.sidebar:
             tech_col_a, tech_col_b = st.columns(2)
             with tech_col_a:
                 tech_dna = st.checkbox(
-                    "DNA", value="DNA" in initial.technologies, key="tech_dna",
+                    "DNA", key="tech_dna",
                 )
                 tech_amazon = st.checkbox(
-                    "Amazon", value="Amazon Deep Archive" in initial.technologies, key="tech_amazon",
+                    "Amazon", key="tech_amazon",
                 )
                 tech_tape = st.checkbox(
-                    "Tape", value="Tape On-premise" in initial.technologies, key="tech_tape",
+                    "Tape", key="tech_tape",
                 )
             with tech_col_b:
                 tech_azure = st.checkbox(
-                    "Azure", value="Azure Blob Archive" in initial.technologies, key="tech_azure",
+                    "Azure", key="tech_azure",
                 )
                 tech_custom = st.checkbox(
-                    "Custom", value="Custom storage" in initial.technologies, key="tech_custom",
+                    "Custom", key="tech_custom",
                 )
 
         with st.expander("DNA cost assumptions"):
             dna_cost_base_year = st.number_input(
-                "DNA cost base year", min_value=2000, max_value=2500, value=initial.dna_cost_base_year,
+                "DNA cost base year", min_value=2000, max_value=2500,
                 key="dna_cost_base_year",
                 help="Year to which the editable synthesis and sequencing unit costs apply.",
             )
             dna_synthesis_cost = st.number_input(
-                "Synthesis cost (USD/MB)", min_value=0.0, value=float(initial.dna_synthesis_cost_per_mb),
+                "Synthesis cost (USD/MB)", min_value=0.0,
                 format="%.6f", key="dna_synthesis_cost",
                 help="Cost in the DNA cost base year to synthesize enough bases for 1 MB of logical data, before redundancy and indexing overhead.",
             )
             dna_sequencing_cost = st.number_input(
-                "Sequencing cost (USD/MB)", min_value=0.0, value=float(initial.dna_sequencing_cost_per_mb),
+                "Sequencing cost (USD/MB)", min_value=0.0,
                 format="%.8f", key="dna_sequencing_cost",
                 help="Cost in the DNA cost base year to sequence 1 MB of retrieved logical data.",
             )
             synthesis_decline = st.number_input(
                 "Synthesis annual decline (%)", min_value=0.0, max_value=99.99,
-                value=float(initial.synthesis_decline_percent), key="synthesis_decline",
+                key="synthesis_decline",
                 help="Percentage by which synthesis cost is assumed to fall each calendar year.",
             )
             sequencing_decline = st.number_input(
                 "Sequencing annual decline (%)", min_value=0.0, max_value=99.99,
-                value=float(initial.sequencing_decline_percent), key="sequencing_decline",
+                key="sequencing_decline",
                 help="Percentage by which sequencing cost is assumed to fall each calendar year.",
             )
             dna_durability = st.number_input(
                 "DNA durability (years)", min_value=1, max_value=10_000,
-                value=initial.dna_durability_years, key="dna_durability",
+                key="dna_durability",
                 help="Years before the archive must be synthesized again. No replacement occurs at the exact end of the horizon.",
             )
 
@@ -381,36 +450,36 @@ with st.sidebar:
             st.caption("Price reference")
             amazon_base_year = st.number_input(
                 "Amazon price base year", min_value=2000, max_value=2500,
-                value=initial.amazon_price_base_year, key="amazon_base_year",
+                key="amazon_base_year",
                 help="Calendar year to which all Amazon prices below apply.",
             )
             amazon_decline = st.number_input(
                 "Amazon annual price decline (%)", min_value=0.0, max_value=99.99,
-                value=float(initial.amazon_decline_percent), key="amazon_decline",
+                key="amazon_decline",
                 help="Annual reduction applied to Amazon request, retrieval, and storage prices.",
             )
             st.caption("Base-year prices")
             amazon_put_per_1000 = st.number_input(
                 "Write requests (USD/1,000)", min_value=0.0,
-                value=float(initial.amazon_put_usd_per_request * 1_000), format="%.6f",
+                format="%.6f",
                 key="amazon_put_per_1000",
                 help="Charge for 1,000 requests when the archive is initially written.",
             )
             amazon_restore_per_1000 = st.number_input(
                 "Bulk restore requests (USD/1,000)", min_value=0.0,
-                value=float(initial.amazon_bulk_restore_usd_per_request * 1_000), format="%.6f",
+                format="%.6f",
                 key="amazon_restore_per_1000",
                 help="Charge for 1,000 bulk restore-job requests. Asset size determines the request count.",
             )
             amazon_retrieval_per_tb = st.number_input(
                 "Bulk data retrieval (USD/TB)", min_value=0.0,
-                value=float(initial.amazon_bulk_retrieval_usd_per_mb * 1_000_000), format="%.6f",
+                format="%.6f",
                 key="amazon_retrieval_per_tb",
                 help="Capacity charge for retrieving one TB of archived data.",
             )
             amazon_storage_per_tb_month = st.number_input(
                 "Storage (USD/TB/month)", min_value=0.0,
-                value=float(initial.amazon_storage_usd_per_mb_month * 1_000_000), format="%.6f",
+                format="%.6f",
                 key="amazon_storage_per_tb_month",
                 help="Recurring monthly charge to retain one TB in Deep Archive.",
             )
@@ -419,36 +488,36 @@ with st.sidebar:
             st.caption("Price reference")
             azure_base_year = st.number_input(
                 "Azure price base year", min_value=2000, max_value=2500,
-                value=initial.azure_price_base_year, key="azure_base_year",
+                key="azure_base_year",
                 help="Calendar year to which all Azure prices below apply.",
             )
             azure_decline = st.number_input(
                 "Azure annual price decline (%)", min_value=0.0, max_value=99.99,
-                value=float(initial.azure_decline_percent), key="azure_decline",
+                key="azure_decline",
                 help="Annual reduction applied to Azure request, retrieval, and storage prices.",
             )
             st.caption("Base-year prices")
             azure_write_per_1000 = st.number_input(
                 "Write requests (USD/1,000)", min_value=0.0,
-                value=float(initial.azure_write_usd_per_request * 1_000), format="%.6f",
+                format="%.6f",
                 key="azure_write_per_1000",
                 help="Charge for 1,000 requests when the archive is initially written.",
             )
             azure_read_per_1000 = st.number_input(
                 "Read requests (USD/1,000)", min_value=0.0,
-                value=float(initial.azure_read_usd_per_request * 1_000), format="%.6f",
+                format="%.6f",
                 key="azure_read_per_1000",
                 help="Charge for 1,000 retrieval requests. Asset size determines the request count.",
             )
             azure_retrieval_per_tb = st.number_input(
                 "Data retrieval (USD/TB)", min_value=0.0,
-                value=float(initial.azure_retrieval_usd_per_mb * 1_000_000), format="%.6f",
+                format="%.6f",
                 key="azure_retrieval_per_tb",
                 help="Capacity charge for retrieving one TB from the Archive tier.",
             )
             azure_storage_per_tb_month = st.number_input(
                 "Storage (USD/TB/month)", min_value=0.0,
-                value=float(initial.azure_storage_usd_per_mb_month * 1_000_000), format="%.6f",
+                format="%.6f",
                 key="azure_storage_per_tb_month",
                 help="Recurring monthly charge to retain one TB in the Archive tier.",
             )
@@ -457,91 +526,91 @@ with st.sidebar:
             st.caption("Price reference")
             tape_base_year = st.number_input(
                 "Tape price base year", min_value=2000, max_value=2500,
-                value=initial.tape_price_base_year, key="tape_base_year",
+                key="tape_base_year",
                 help="Calendar year to which the tape media, hardware, and energy prices apply.",
             )
             tape_durability = st.number_input(
                 "Tape durability (years)", min_value=1, max_value=1_000,
-                value=initial.tape_durability_years, key="tape_durability",
+                key="tape_durability",
                 help="Years between complete tape media replacement writes.",
             )
             st.caption("Base-year prices")
             tape_media_per_tb = st.number_input(
                 "Tape media (USD/TB)", min_value=0.0,
-                value=float(initial.tape_media_usd_per_tb), format="%.6f",
+                format="%.6f",
                 key="tape_media_per_tb",
                 help="Media purchase cost for one TB, charged on the initial write and every replacement.",
             )
             tape_hardware_per_tb = st.number_input(
                 "Hardware (USD/TB)", min_value=0.0,
-                value=float(initial.tape_hardware_usd_per_tb), format="%.6f",
+                format="%.6f",
                 key="tape_hardware_per_tb",
                 help="Hardware cost allocated per TB and amortized over the selected durability period.",
             )
             tape_energy_per_tb_year = st.number_input(
                 "Energy (USD/TB/year)", min_value=0.0,
-                value=float(initial.tape_energy_usd_per_tb_year), format="%.6f",
+                format="%.6f",
                 key="tape_energy_per_tb_year",
                 help="Annual energy cost to retain one TB in the tape system.",
             )
             st.caption("Annual price declines")
             tape_media_decline = st.number_input(
                 "Tape media decline (%)", min_value=0.0, max_value=99.99,
-                value=float(initial.tape_media_decline_percent), key="tape_media_decline",
+                key="tape_media_decline",
                 help="Annual reduction applied to tape media purchase prices.",
             )
             tape_hardware_decline = st.number_input(
                 "Tape hardware decline (%)", min_value=0.0, max_value=99.99,
-                value=float(initial.tape_hardware_decline_percent), key="tape_hardware_decline",
+                key="tape_hardware_decline",
                 help="Annual reduction applied to amortized tape hardware costs.",
             )
             tape_energy_decline = st.number_input(
                 "Tape energy decline (%)", min_value=0.0, max_value=99.99,
-                value=float(initial.tape_energy_decline_percent), key="tape_energy_decline",
+                key="tape_energy_decline",
                 help="Annual reduction applied to tape energy costs.",
             )
 
         with st.expander("Custom storage assumptions"):
             custom_name = st.text_input(
-                "Display name", value=initial.custom_storage_name, key="custom_name",
+                "Display name", key="custom_name",
                 help="Name used for the custom technology in charts, tables, and downloads.",
             )
             custom_base_year = st.number_input(
-                "Price base year", min_value=2000, max_value=2500, value=initial.custom_cost_base_year,
+                "Price base year", min_value=2000, max_value=2500,
                 key="custom_base_year", help="Year to which all custom prices apply.",
             )
             custom_write_tb = st.number_input(
-                "Initial write cost (USD/TB)", min_value=0.0, value=float(initial.custom_write_cost_per_tb),
+                "Initial write cost (USD/TB)", min_value=0.0,
                 key="custom_write_tb", help="Capacity-based charge to write or replace one TB.",
             )
             custom_write_asset = st.number_input(
                 "Write request cost (USD/asset)", min_value=0.0,
-                value=float(initial.custom_write_cost_per_asset), key="custom_write_asset",
+                key="custom_write_asset",
                 help="Per-file or per-object charge applied when the archive is written or replaced.",
             )
             custom_storage_tb_year = st.number_input(
                 "Annual storage cost (USD/TB)", min_value=0.0,
-                value=float(initial.custom_storage_cost_per_tb_year), key="custom_storage_tb_year",
+                key="custom_storage_tb_year",
                 help="Recurring cost to retain one TB for one year.",
             )
             custom_retrieval_tb = st.number_input(
                 "Retrieval cost (USD/TB)", min_value=0.0,
-                value=float(initial.custom_retrieval_cost_per_tb), key="custom_retrieval_tb",
+                key="custom_retrieval_tb",
                 help="Capacity-based charge for each TB retrieved.",
             )
             custom_retrieval_asset = st.number_input(
                 "Retrieval request cost (USD/asset)", min_value=0.0,
-                value=float(initial.custom_retrieval_cost_per_asset), key="custom_retrieval_asset",
+                key="custom_retrieval_asset",
                 help="Per-file or per-object charge for the expected assets retrieved each year.",
             )
             custom_decline = st.number_input(
                 "Annual price decline (%)", min_value=0.0, max_value=99.99,
-                value=float(initial.custom_decline_percent), key="custom_decline",
+                key="custom_decline",
                 help="Annual percentage reduction applied to every custom price.",
             )
             custom_replacement = st.number_input(
                 "Replacement interval (years)", min_value=0, max_value=10_000,
-                value=initial.custom_replacement_years, key="custom_replacement",
+                key="custom_replacement",
                 help="Years between complete rewrites. Use 0 for a service with no replacement writes.",
             )
 
