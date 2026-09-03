@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 import pandas as pd
 import streamlit as st
 
@@ -18,6 +20,7 @@ from economic_dna.visualization import (
     dna_unit_cost_exports,
     lifecycle_chart,
     lifecycle_exports,
+    palette_for,
     projection_chart,
     projection_exports,
 )
@@ -33,18 +36,139 @@ st.markdown(
     """
     <style>
     :root {
-        --canvas: #f4f6f5;
+        --canvas: #eef2f0;
         --surface: #ffffff;
-        --surface-subtle: #eef2f0;
+        --surface-subtle: #e6ece9;
+        --sidebar-bg: #f8faf9;
         --ink: #18211f;
-        --muted: #64706c;
-        --line: #d9dfdc;
-        --line-strong: #c4cdc9;
+        --ink-soft: #34413d;
+        --muted: #5f6e68;
+        --line: #d9e0dc;
+        --line-strong: #c2ccc7;
         --accent: #bd4b38;
         --accent-strong: #963829;
         --accent-soft: #faece8;
+        --accent-glow: rgba(189, 75, 56, 0.32);
+        --action-bg: #bd4b38;
+        --action-bg-hover: #963829;
+        --action-text: #ffffff;
         --teal: #1f716a;
         --gold: #b78322;
+        --chip-bg: #f6ecd8;
+        --chip-border: #e3cf9e;
+        --chip-text: #8a6414;
+        --download-text: #40504b;
+        --scroll-thumb: #c2ccc7;
+        --header-bg: rgba(238, 242, 240, 0.96);
+        --shadow-sm: 0 1px 3px rgba(24, 33, 31, 0.07);
+        --shadow-md: 0 3px 10px rgba(24, 33, 31, 0.14);
+        --shadow-lg: 0 8px 22px rgba(24, 33, 31, 0.16);
+        --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+    }
+    /* The dark palette applies when the Python-rendered theme marker carries
+       theme-dark: the system preference decides the initial theme, and the
+       sidebar toggle (or a shared URL) overrides it after. */
+    html:has(.theme-marker.theme-dark) {
+        --canvas: #0f1516;
+        --surface: #171f20;
+        --surface-subtle: #1e282a;
+        --sidebar-bg: #121a1b;
+        --ink: #e7edeb;
+        --ink-soft: #c3cfcb;
+        --muted: #93a19d;
+        --line: #273234;
+        --line-strong: #38464a;
+        --accent: #d96a52;
+        --accent-strong: #e58a74;
+        --accent-soft: #3a231e;
+        --accent-glow: rgba(217, 106, 82, 0.35);
+        --action-bg: #c9533b;
+        --action-bg-hover: #d96a52;
+        --action-text: #ffffff;
+        --teal: #45a694;
+        --gold: #d4a63e;
+        --chip-bg: #3a3018;
+        --chip-border: #5a4a24;
+        --chip-text: #e6c77e;
+        --download-text: #aab9b4;
+        --scroll-thumb: #38464a;
+        --header-bg: rgba(15, 21, 22, 0.96);
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+        --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.55);
+        --shadow-lg: 0 8px 22px rgba(0, 0, 0, 0.65);
+        /* Streamlit theme tokens, so its own widgets follow the dark theme. */
+        --background-color: #0f1516;
+        --secondary-background-color: #171f20;
+        --text-color: #e7edeb;
+        --primary-color: #d96a52;
+        --border-color: #273234;
+    }
+
+    /* Dark-mode fixes for Streamlit widgets whose emotion styles are compiled
+       from the light theme config and ignore the CSS variables. */
+    html:has(.theme-marker.theme-dark) .stButton button,
+    html:has(.theme-marker.theme-dark) .stDownloadButton button {
+        background: var(--surface);
+        border-color: var(--line);
+        color: var(--ink);
+    }
+    html:has(.theme-marker.theme-dark) .stButton button:hover,
+    html:has(.theme-marker.theme-dark) .stDownloadButton button:hover {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+    }
+    html:has(.theme-marker.theme-dark) [data-testid="stTooltipIcon"] {
+        color: var(--accent) !important;
+    }
+    html:has(.theme-marker.theme-dark) [data-testid="stTooltipIcon"]:hover {
+        color: var(--accent-strong) !important;
+    }
+    /* Streamlit's .icon class hardcodes a dark stroke; the "?" is drawn with
+       stroke, not fill, so the stroke color itself must be overridden. */
+    html:has(.theme-marker.theme-dark) [data-testid="stTooltipIcon"] svg {
+        stroke: var(--accent) !important;
+        stroke-width: 2.4;
+    }
+    /* The running indicator is drawn in dark ink and disappears on the dark
+       header; brighten it to the dark theme's ink color. */
+    html:has(.theme-marker.theme-dark) [data-testid="stStatusWidgetRunningIcon"] svg,
+    html:has(.theme-marker.theme-dark) [data-testid="stStatusWidget"] span {
+        color: var(--ink) !important;
+    }
+    html:has(.theme-marker.theme-dark) [data-testid="stStatusWidgetRunningIcon"] svg {
+        filter: drop-shadow(0 0 4px rgba(231, 237, 235, 0.35));
+    }
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stExpander"] summary {
+        background: var(--surface) !important;
+        color: var(--ink-soft) !important;
+    }
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stExpander"] summary span {
+        color: var(--ink-soft) !important;
+    }
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover,
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stExpander"] details[open] summary {
+        background: var(--surface-subtle) !important;
+    }
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] input[data-testid="stNumberInputField"],
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stSelectbox"] input {
+        color: var(--ink) !important;
+        -webkit-text-fill-color: var(--ink) !important;
+    }
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stNumberInputStepUp"],
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stNumberInputStepDown"] {
+        color: var(--muted) !important;
+    }
+    html:has(.theme-marker.theme-dark) div:has(> [role="listbox"]) {
+        background: var(--surface) !important;
+        border: 1px solid var(--line-strong) !important;
+    }
+    html:has(.theme-marker.theme-dark) [role="listbox"] [role="option"] {
+        background: transparent !important;
+        color: var(--ink) !important;
+    }
+    html:has(.theme-marker.theme-dark) [role="listbox"] [role="option"]:hover,
+    html:has(.theme-marker.theme-dark) [role="listbox"] [role="option"][aria-selected="true"] {
+        background: var(--surface-subtle) !important;
     }
 
     html, body {
@@ -55,10 +179,29 @@ st.markdown(
         background: var(--canvas);
         color: var(--ink);
         font-family: "Aptos", "Segoe UI", Arial, sans-serif;
+        transition: background-color 0.3s var(--ease), color 0.3s var(--ease);
     }
     [data-testid="stHeader"] {
-        background: rgba(244, 246, 245, 0.96);
-        border-bottom: 1px solid rgba(217, 223, 220, 0.8);
+        background: var(--header-bg);
+        border-bottom: 1px solid var(--line);
+        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
+    }
+    /* Theme toggle pinned to the page header, just left of Streamlit's toolbar
+       menu (which occupies the rightmost 48px of the header). The running
+       indicator sits immediately to the toggle's left instead of overlapping
+       it. */
+    .st-key-theme-toggle-anchor .stButton button {
+        position: fixed;
+        right: 3.9rem;
+        top: 0.7rem;
+        width: fit-content !important;
+        z-index: 999990;
+    }
+    [data-testid="stStatusWidget"] {
+        position: fixed !important;
+        right: 9.9rem !important;
+        top: 0.7rem !important;
+        z-index: 999990;
     }
     .block-container {
         max-width: 1440px;
@@ -82,8 +225,9 @@ st.markdown(
 
     section[data-testid="stSidebar"] {
         width: 460px !important;
-        background: #fbfcfb;
+        background: var(--sidebar-bg);
         border-right: 1px solid var(--line);
+        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
     }
     section[data-testid="stSidebar"] > div { width: 460px !important; }
     section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
@@ -129,18 +273,24 @@ st.markdown(
         text-transform: uppercase;
     }
     section[data-testid="stSidebar"] label p {
-        color: #34413d;
+        color: var(--ink-soft);
         font-size: 0.82rem;
         font-weight: 600;
     }
-    section[data-testid="stSidebar"] [data-baseweb="input"],
-    section[data-testid="stSidebar"] [data-baseweb="select"] > div {
+    .log-scale-label {
+        color: var(--ink-soft);
+        font-size: 0.82rem;
+        font-weight: 600;
+        margin: 0 0 0.3rem;
+    }
+    section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"],
+    section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input) {
         background: var(--surface);
         border-color: var(--line-strong);
         border-radius: 6px;
     }
-    section[data-testid="stSidebar"] [data-baseweb="input"]:focus-within,
-    section[data-testid="stSidebar"] [data-baseweb="select"] > div:focus-within {
+    section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"]:focus-within,
+    section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input):focus-within {
         border-color: var(--accent);
         box-shadow: 0 0 0 1px var(--accent);
     }
@@ -160,14 +310,18 @@ st.markdown(
     }
 
     .stButton button, .stDownloadButton button {
-        border-radius: 6px;
+        border-radius: 8px;
         font-weight: 650;
         min-height: 2.35rem;
-        transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+        transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease,
+            transform 90ms ease, box-shadow 120ms ease;
     }
     .stButton button:hover, .stDownloadButton button:hover {
         border-color: var(--accent);
         color: var(--accent-strong);
+    }
+    .stButton button:active, .stDownloadButton button:active {
+        transform: translateY(1px) scale(0.985);
     }
     [data-testid="stFormSubmitButton"] button {
         min-height: 2.75rem;
@@ -211,7 +365,7 @@ st.markdown(
     }
     section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
     > [data-testid="stColumn"]:first-child::-webkit-scrollbar-thumb {
-        background: var(--line-strong);
+        background: var(--scroll-thumb);
         border-radius: 4px;
     }
     section[data-testid="stSidebar"] .st-key-scenario-action-rail {
@@ -230,24 +384,43 @@ st.markdown(
         position: absolute;
         inset: 0;
     }
+    @keyframes pending-pulse {
+        0%, 100% { box-shadow: var(--shadow-md), 0 0 0 0 var(--accent-glow); }
+        55% { box-shadow: var(--shadow-md), 0 0 0 6px transparent; }
+    }
     section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button {
         align-items: center;
-        background: var(--accent);
-        border-color: var(--accent);
-        border-radius: 6px;
-        box-shadow: 0 3px 10px rgba(24, 33, 31, 0.14);
-        color: #ffffff;
+        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
+        border-color: var(--action-bg);
+        border-radius: 8px;
+        box-shadow: var(--shadow-md);
+        color: var(--action-text);
         display: flex;
         flex-direction: column;
         inset: 0;
         justify-content: space-between;
         padding: 1rem 0.45rem;
         position: absolute;
+        transition: filter 140ms ease, transform 90ms ease, box-shadow 140ms ease;
     }
     section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button:hover {
-        background: var(--accent-strong);
-        border-color: var(--accent-strong);
-        color: #ffffff;
+        filter: brightness(1.09);
+        transform: translateY(-1px);
+        box-shadow: var(--shadow-lg);
+    }
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button:active {
+        filter: brightness(0.94);
+        transform: translateY(1px) scale(0.992);
+        box-shadow: var(--shadow-sm);
+    }
+    .st-key-scenario-action-rail:has(.pending-marker) .stButton button {
+        animation: pending-pulse 1.9s var(--ease) infinite;
+    }
+    .pending-marker { display: none; }
+    [data-testid="stMarkdownContainer"]:has(.theme-marker) { display: none; }
+    .st-key-theme_auto_dark,
+    [data-testid="stElementContainer"]:has(.st-key-theme_auto_dark) {
+        display: none;
     }
     section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"],
     [data-testid="stExpandSidebarButton"],
@@ -278,8 +451,9 @@ st.markdown(
         line-height: 1;
     }
     section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button p {
-        font-size: 0.9rem;
-        line-height: 1.25;
+        font-size: 1.3rem;
+        font-weight: 700;
+        line-height: 1.2;
         white-space: nowrap;
         writing-mode: vertical-rl;
         transform: rotate(180deg);
@@ -287,7 +461,7 @@ st.markdown(
     .stDownloadButton button {
         background: var(--surface);
         border-color: var(--line);
-        color: #40504b;
+        color: var(--download-text);
     }
 
     .page-kicker { margin-bottom: 0.35rem; }
@@ -303,7 +477,7 @@ st.markdown(
         background: var(--surface);
         border: 1px solid var(--line);
         border-left: 3px solid var(--accent);
-        border-radius: 6px;
+        border-radius: 10px;
         color: var(--muted);
         display: flex;
         flex-wrap: wrap;
@@ -312,6 +486,7 @@ st.markdown(
         margin: 0 0 1.25rem;
         min-height: 42px;
         padding: 0.65rem 0.85rem;
+        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
     }
     .model-strip strong { color: var(--ink); font-weight: 700; }
     .model-item {
@@ -325,8 +500,8 @@ st.markdown(
         align-items: center;
         background: var(--surface-subtle);
         border: 1px solid var(--line);
-        border-radius: 6px;
-        color: #475650;
+        border-radius: 10px;
+        color: var(--muted);
         display: flex;
         flex-wrap: wrap;
         font-size: 0.82rem;
@@ -334,30 +509,47 @@ st.markdown(
         margin: 0 0 1rem;
         min-height: 44px;
         padding: 0.65rem 0.85rem;
+        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
     }
     .scenario-bar strong { color: var(--ink); }
     .scenario-label { color: var(--teal); font-weight: 750; text-transform: uppercase; }
+    @keyframes chip-in {
+        from { opacity: 0; transform: translateX(-5px); }
+        to { opacity: 1; transform: none; }
+    }
     .scenario-pending {
-        background: #f6ecd8;
-        border: 1px solid #e3cf9e;
-        border-radius: 4px;
-        color: #8a6414;
+        animation: chip-in 0.28s var(--ease) both;
+        background: var(--chip-bg);
+        border: 1px solid var(--chip-border);
+        border-radius: 999px;
+        color: var(--chip-text);
         font-weight: 650;
-        padding: 0.1rem 0.55rem;
+        padding: 0.12rem 0.65rem;
     }
 
+    @keyframes fade-up {
+        from { opacity: 0; transform: translateY(7px); }
+        to { opacity: 1; transform: none; }
+    }
     [data-testid="stMetric"] {
+        animation: fade-up 0.45s var(--ease) both;
         background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 8px;
-        box-shadow: 0 1px 2px rgba(24, 33, 31, 0.04);
+        border-radius: 10px;
+        box-shadow: var(--shadow-sm);
         min-height: 114px;
         overflow: hidden;
         padding: 0.95rem 1rem;
         position: relative;
+        transition: transform 160ms var(--ease), box-shadow 160ms var(--ease),
+            background-color 0.3s var(--ease), border-color 0.3s var(--ease);
+    }
+    [data-testid="stMetric"]:hover {
+        box-shadow: var(--shadow-md);
+        transform: translateY(-2px);
     }
     [data-testid="stMetric"]::before {
-        background: var(--accent);
+        background: linear-gradient(90deg, var(--accent) 0%, var(--gold) 130%);
         content: "";
         height: 3px;
         left: 0;
@@ -381,36 +573,42 @@ st.markdown(
 
     .workspace-kicker { margin: 1.55rem 0 0.35rem; }
     div[data-testid="stTabs"] div[role="tablist"] {
-        background: transparent;
-        border-bottom: 1px solid var(--line-strong);
-        border-radius: 0;
-        gap: 1.6rem;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: var(--shadow-sm);
+        gap: 0.3rem;
         margin: 0 0 1.2rem;
+        max-width: 100%;
         overflow-x: auto;
-        padding: 0;
+        padding: 0.3rem;
+        width: fit-content;
     }
     div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"] {
         background: transparent;
         border: 0;
-        border-bottom: 2px solid transparent;
-        border-radius: 0;
+        border-radius: 9px;
         color: var(--muted);
         flex: 0 0 auto;
         font-weight: 650;
-        min-height: 44px;
-        padding: 0.6rem 0.1rem 0.7rem;
+        min-height: 48px;
+        padding: 0.7rem 1.35rem;
+        transition: background-color 140ms ease, color 140ms ease;
+    }
+    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"] p {
+        font-size: 1rem;
     }
     div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"]:hover {
-        background: transparent;
-        color: var(--accent-strong);
+        background: var(--surface-subtle);
+        color: var(--ink);
     }
     div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"][aria-selected="true"] {
-        background: transparent;
-        border-bottom-color: var(--accent);
-        color: var(--accent-strong);
+        background: var(--action-bg);
+        color: var(--action-text);
+        font-weight: 700;
     }
     div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"][aria-selected="true"] p {
-        color: var(--accent-strong);
+        color: var(--action-text);
     }
     div[data-testid="stTabs"] .react-aria-SelectionIndicator,
     div[data-testid="stTabs"] div[data-baseweb="tab-highlight"],
@@ -436,19 +634,62 @@ st.markdown(
     .chart-divider h3 { font-size: 1rem; margin: 0 0 0.2rem; }
     .chart-divider p { color: var(--muted); font-size: 0.84rem; margin: 0; }
     div[data-testid="stPlotlyChart"] {
+        animation: fade-up 0.5s var(--ease) both;
         background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 8px;
-        box-shadow: 0 1px 2px rgba(24, 33, 31, 0.03);
+        border-radius: 10px;
+        box-shadow: var(--shadow-sm);
         overflow: hidden;
         padding: 0.2rem;
+        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease),
+            box-shadow 160ms var(--ease);
     }
-    [data-testid="stDataFrame"] {
+    div[data-testid="stPlotlyChart"]:hover {
+        box-shadow: var(--shadow-md);
+    }
+    .contract-card {
+        background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 6px;
+        border-radius: 10px;
+        box-shadow: var(--shadow-sm);
         overflow: hidden;
+        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
     }
+    .contract-table {
+        border-collapse: collapse;
+        font-size: 0.88rem;
+        width: 100%;
+    }
+    .contract-table th, .contract-table td {
+        border-bottom: 1px solid var(--line);
+        padding: 0.55rem 0.8rem;
+        text-align: left;
+        vertical-align: top;
+    }
+    .contract-table th {
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 750;
+        text-transform: uppercase;
+    }
+    .contract-table td:first-child { color: var(--muted); font-weight: 650; }
+    .contract-table td:last-child { color: var(--ink); }
+    .contract-table tbody tr:hover { background: var(--surface-subtle); }
+    .contract-table tbody tr:last-child td { border-bottom: 0; }
     .export-label { color: var(--muted); margin: 0.65rem 0 0.35rem; }
+    section[data-testid="stMain"]::-webkit-scrollbar,
+    [data-testid="stMainBlockContainer"]::-webkit-scrollbar {
+        width: 10px;
+    }
+    section[data-testid="stMain"]::-webkit-scrollbar-thumb,
+    [data-testid="stMainBlockContainer"]::-webkit-scrollbar-thumb {
+        background: var(--scroll-thumb);
+        border-radius: 5px;
+    }
+    section[data-testid="stMain"]::-webkit-scrollbar-track,
+    [data-testid="stMainBlockContainer"]::-webkit-scrollbar-track {
+        background: transparent;
+    }
 
     @media (max-width: 900px) {
         section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div {
@@ -472,6 +713,75 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+# Theme: an explicit choice (URL parameter or the sidebar toggle) wins; on a
+# first visit Python starts from light and the component below redirects to
+# dark when the system prefers it. The rendered marker drives the CSS via
+# html:has(...), so every rerun reflects the resolved theme immediately.
+theme = str(st.query_params.get("theme", ""))
+if theme not in ("light", "dark"):
+    theme = st.session_state.get("theme", "light")
+    if theme not in ("light", "dark"):
+        theme = "light"
+st.session_state["theme"] = theme
+
+st.markdown(
+    f'<div class="theme-marker theme-{theme}" hidden></div>',
+    unsafe_allow_html=True,
+)
+
+
+def _apply_system_dark() -> None:
+    st.session_state["theme"] = "dark"
+    st.query_params["theme"] = "dark"
+    st.rerun()
+
+
+# Hidden button the theme-sync iframe clicks programmatically when the system
+# prefers dark and no explicit theme is set, so the server learns the
+# preference (its iframe is sandboxed against navigating the top window).
+st.button(
+    label=None,
+    key="theme_auto_dark",
+    on_click=_apply_system_dark,
+    icon=":material/dark_mode:",
+)
+
+_THEME_SYNC_JS = """
+<script>
+(() => {
+  const params = new URLSearchParams(parent.location.search);
+  if (params.get("theme")) return;
+  if (!parent.matchMedia("(prefers-color-scheme: dark)").matches) return;
+  const tryClick = () => {
+    const btn = parent.document.querySelector(".st-key-theme_auto_dark button");
+    if (!btn) return false;
+    btn.click();
+    return true;
+  };
+  if (tryClick()) return;
+  let tries = 0;
+  const timer = setInterval(() => {
+    tries += 1;
+    if (tryClick() || tries > 100) clearInterval(timer);
+  }, 150);
+})();
+</script>
+"""
+
+st.iframe(_THEME_SYNC_JS, width=1, height=1)
+
+# Theme toggle, pinned to the page header next to Streamlit's toolbar menu.
+with st.container(key="theme-toggle-anchor"):
+    if st.button(
+        "Dark" if theme == "light" else "Light",
+        icon=":material/dark_mode:" if theme == "light" else ":material/light_mode:",
+        key="theme_toggle",
+    ):
+        new_theme = "dark" if theme == "light" else "light"
+        st.session_state["theme"] = new_theme
+        st.query_params["theme"] = new_theme
+        st.rerun()
 
 
 WIDGET_KEYS = [
@@ -622,7 +932,12 @@ def _reset_to_paper_baseline() -> None:
     st.session_state.update({key: baseline_state[key] for key in WIDGET_KEYS})
     st.session_state["committed_widgets"] = {key: st.session_state[key] for key in WIDGET_KEYS}
     st.session_state["form_generation"] = st.session_state.get("form_generation", 0) + 1
-    st.query_params.clear()
+    remaining = {}
+    theme_value = st.query_params.get("theme")
+    if theme_value:
+        remaining["theme"] = theme_value
+    st.query_params.from_dict(remaining)
+    st.rerun()
 
 
 def _snapshot_widgets() -> dict[str, bool | float | int | str]:
@@ -710,6 +1025,19 @@ def _quantity(value: float) -> str:
 def _section_intro(title: str, description: str) -> None:
     st.markdown(
         f'<div class="tab-intro"><h2>{title}</h2><p>{description}</p></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def _themed_table(columns: list[str], rows: list[list[str]]) -> None:
+    header = "".join(f"<th>{html.escape(column)}</th>" for column in columns)
+    body = "".join(
+        "<tr>" + "".join(f"<td>{html.escape(str(cell))}</td>" for cell in row) + "</tr>"
+        for row in rows
+    )
+    st.markdown(
+        f'<div class="contract-card"><table class="contract-table">'
+        f"<thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div>",
         unsafe_allow_html=True,
     )
 
@@ -871,8 +1199,10 @@ with st.sidebar:
                 help="Final archive start year included in the start-year outlook chart.",
             )
         with chart_col_b:
+            st.markdown('<div class="log-scale-label">Log</div>', unsafe_allow_html=True)
             log_scale = st.toggle(
-                "Log", key="log_scale",
+                label=None,
+                key="log_scale",
                 help="Recommended when technologies differ by several orders of magnitude.",
             )
 
@@ -1100,15 +1430,15 @@ with st.sidebar:
 
     with action_column:
         with st.container(key="scenario-action-rail"):
+            if pending:
+                st.markdown(
+                    '<span class="pending-marker" aria-hidden="true"></span>',
+                    unsafe_allow_html=True,
+                )
             submitted = st.button(
-                "Calculate scenario",
+                "Calculate",
                 type="primary",
                 key="calculate_scenario",
-                help=(
-                    "Graphs are out of date — apply the current model inputs."
-                    if pending
-                    else "Apply the current model inputs and update all graphs."
-                ),
                 width="stretch",
             )
 
@@ -1179,8 +1509,15 @@ if submitted:
         st.stop()
     st.session_state["committed_widgets"] = _snapshot_widgets()
     params = candidate.to_query_params()
-    params.update({"projection_end": str(int(projection_end)), "log_scale": str(log_scale)})
+    params.update(
+        {
+            "projection_end": str(int(projection_end)),
+            "log_scale": str(log_scale),
+            "theme": theme,
+        }
+    )
     st.query_params.from_dict(params)
+    st.rerun()
 
 committed_widgets = st.session_state["committed_widgets"]
 pending = _snapshot_widgets() != committed_widgets
@@ -1207,6 +1544,7 @@ dna_curve_end = max(
 dna_costs = _cached_dna_costs(scenario, dna_curve_end)
 use_present_value = scenario.discount_rate_percent > 0
 value_column = "present_value_usd" if use_present_value else "total_cost_usd"
+chart_palette = palette_for(theme)
 
 st.markdown('<div class="page-kicker">Archival storage economics</div>', unsafe_allow_html=True)
 st.title("DNA Storage Cost Explorer")
@@ -1289,13 +1627,13 @@ with overview_tab:
         "Cumulative lifecycle cost for one archive opened in the selected start year. "
         "Each line includes initial and replacement writes, storage or operation, and expected retrieval.",
     )
-    lifecycle_figure = lifecycle_chart(result, use_present_value, log_scale)
+    lifecycle_figure = lifecycle_chart(result, use_present_value, log_scale, theme=theme)
     st.plotly_chart(
         lifecycle_figure,
         width="stretch",
         config=_plot_config("dna-storage-lifecycle"),
     )
-    lifecycle_files = lifecycle_exports(result, use_present_value, log_scale)
+    lifecycle_files = lifecycle_exports(result, use_present_value, log_scale, theme=theme)
     _chart_downloads(
         "lifecycle",
         result.yearly.to_csv(index=False).encode("utf-8"),
@@ -1311,7 +1649,7 @@ with overview_tab:
         """,
         unsafe_allow_html=True,
     )
-    breakdown_figure = breakdown_chart(result, log_scale)
+    breakdown_figure = breakdown_chart(result, log_scale, theme=theme)
     st.plotly_chart(
         breakdown_figure,
         width="stretch",
@@ -1324,7 +1662,7 @@ with overview_tab:
         "breakdown",
         result.totals[breakdown_columns].to_csv(index=False).encode("utf-8"),
         "dna-storage-cost-components",
-        breakdown_exports(result, log_scale),
+        breakdown_exports(result, log_scale, theme=theme),
     )
 
 with outlook_tab:
@@ -1334,7 +1672,7 @@ with outlook_tab:
         "start year. A crossover is the first start year for which DNA's lifecycle cost is no greater "
         "than the comparison technology.",
     )
-    projection_figure = projection_chart(projection, use_present_value, log_scale)
+    projection_figure = projection_chart(projection, use_present_value, log_scale, theme=theme)
     st.plotly_chart(
         projection_figure,
         width="stretch",
@@ -1344,7 +1682,7 @@ with outlook_tab:
         "projection",
         projection.to_csv(index=False).encode("utf-8"),
         "dna-storage-start-year-outlook",
-        projection_exports(projection, use_present_value, log_scale, result.metadata),
+        projection_exports(projection, use_present_value, log_scale, result.metadata, theme=theme),
     )
     st.markdown(
         """
@@ -1364,7 +1702,10 @@ with outlook_tab:
             }
             for technology, year in crossovers.items()
         ]
-        st.dataframe(pd.DataFrame(crossover_rows), hide_index=True, width="stretch")
+        _themed_table(
+            ["Comparison", "First start year"],
+            [[row["Comparison"], row["First start year"]] for row in crossover_rows],
+        )
     else:
         st.info("Include DNA and at least one comparison technology to calculate crossover years.")
 
@@ -1383,8 +1724,9 @@ with dna_cost_tab:
                 dna_costs,
                 "synthesis_cost_usd_per_mb",
                 synthesis_title,
-                "#bd4b38",
+                chart_palette["unit_cost_colors"]["synthesis"],
                 log_scale,
+                theme=theme,
             ),
             width="stretch",
             config=_plot_config("dna-synthesis-cost-trajectory"),
@@ -1402,9 +1744,10 @@ with dna_cost_tab:
                 dna_costs,
                 "synthesis_cost_usd_per_mb",
                 synthesis_title,
-                "#bd4b38",
+                chart_palette["unit_cost_colors"]["synthesis"],
                 log_scale,
                 result.metadata,
+                theme=theme,
             ),
         )
     with chart_columns[1]:
@@ -1414,8 +1757,9 @@ with dna_cost_tab:
                 dna_costs,
                 "sequencing_cost_usd_per_mb",
                 sequencing_title,
-                "#176b87",
+                chart_palette["unit_cost_colors"]["sequencing"],
                 log_scale,
+                theme=theme,
             ),
             width="stretch",
             config=_plot_config("dna-sequencing-cost-trajectory"),
@@ -1433,9 +1777,10 @@ with dna_cost_tab:
                 dna_costs,
                 "sequencing_cost_usd_per_mb",
                 sequencing_title,
-                "#176b87",
+                chart_palette["unit_cost_colors"]["sequencing"],
                 log_scale,
                 result.metadata,
+                theme=theme,
             ),
         )
 
@@ -1485,7 +1830,10 @@ with assumptions_tab:
     contract_column, context_column = st.columns([1.45, 1], gap="large")
     with contract_column:
         st.subheader("Scenario contract")
-        st.dataframe(contract, hide_index=True, width="stretch")
+        _themed_table(
+            list(contract.columns),
+            [list(row) for row in contract.itertuples(index=False)],
+        )
     with context_column:
         st.subheader("Cost scope")
         st.write(

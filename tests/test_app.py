@@ -11,7 +11,7 @@ class StreamlitAppTests(unittest.TestCase):
 
     @staticmethod
     def _submit_form(app: AppTest) -> None:
-        next(button for button in app.button if button.label == "Calculate scenario").click()
+        next(button for button in app.button if button.label == "Calculate").click()
 
     def test_paper_baseline_renders_without_exceptions(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
