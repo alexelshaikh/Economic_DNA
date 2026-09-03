@@ -11,7 +11,7 @@ from .simulation import COMPONENTS, SimulationResult
 
 
 COLORS = {
-    "DNA": "#b44737",
+    "DNA": "#bd4b38",
     "Amazon Deep Archive": "#176b87",
     "Azure Blob Archive": "#2e7d57",
     "Tape On-premise": "#6d5b8c",
@@ -27,7 +27,7 @@ COMPONENT_LABELS = {
 def technology_color(technology: str) -> str:
     return COLORS.get(technology, COLORS["Custom storage"])
 COMPONENT_COLORS = {
-    "write_cost_usd": "#b44737",
+    "write_cost_usd": "#bd4b38",
     "read_cost_usd": "#176b87",
     "maintenance_cost_usd": "#d19b2a",
 }
@@ -119,14 +119,41 @@ def projection_chart(
 def style_figure(figure: go.Figure) -> go.Figure:
     figure.update_layout(
         template="plotly_white",
-        font={"family": "Inter, Arial, sans-serif", "color": "#202326"},
-        title_font={"size": 19},
+        font={
+            "family": "Aptos, Segoe UI, Arial, sans-serif",
+            "size": 13,
+            "color": "#34413d",
+        },
+        title_font={"size": 18, "color": "#18211f"},
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#ffffff",
         colorway=list(COLORS.values()),
+        hoverlabel={
+            "bgcolor": "#18211f",
+            "bordercolor": "#18211f",
+            "font": {"color": "#ffffff", "family": "Aptos, Segoe UI, Arial, sans-serif"},
+        },
+        legend={"font": {"size": 12, "color": "#475650"}},
     )
-    figure.update_xaxes(showgrid=False, linecolor="#d9dcdf")
-    figure.update_yaxes(gridcolor="#e8eaec", linecolor="#d9dcdf")
+    figure.update_xaxes(
+        showgrid=False,
+        linecolor="#cbd3cf",
+        tickcolor="#cbd3cf",
+        ticks="outside",
+        tickfont={"color": "#64706c"},
+        title_font={"color": "#475650", "size": 12},
+        automargin=True,
+        zeroline=False,
+    )
+    figure.update_yaxes(
+        gridcolor="#e9edeb",
+        linecolor="#cbd3cf",
+        tickcolor="#cbd3cf",
+        tickfont={"color": "#64706c"},
+        title_font={"color": "#475650", "size": 12},
+        automargin=True,
+        zeroline=False,
+    )
     return figure
 
 

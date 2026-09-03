@@ -32,53 +32,441 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    :root { --ink: #202326; --muted: #62686d; --line: #dfe2e4; --accent: #b44737; }
-    .stApp { background: #f7f8f8; color: var(--ink); }
-    [data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid var(--line); }
-    [data-testid="stMetric"] {
-        background: #ffffff; border: 1px solid var(--line); border-radius: 6px;
-        padding: 14px 16px; min-height: 112px;
+    :root {
+        --canvas: #f4f6f5;
+        --surface: #ffffff;
+        --surface-subtle: #eef2f0;
+        --ink: #18211f;
+        --muted: #64706c;
+        --line: #d9dfdc;
+        --line-strong: #c4cdc9;
+        --accent: #bd4b38;
+        --accent-strong: #963829;
+        --accent-soft: #faece8;
+        --teal: #1f716a;
+        --gold: #b78322;
     }
-    [data-testid="stMetricLabel"] { color: var(--muted); }
-    [data-testid="stMetricValue"] { font-size: 1.55rem; }
-    div[data-testid="stPlotlyChart"] { background: #ffffff; border: 1px solid var(--line); border-radius: 6px; }
-    .model-strip {
-        background: #ffffff; border-left: 4px solid var(--accent); border-top: 1px solid var(--line);
-        border-right: 1px solid var(--line); border-bottom: 1px solid var(--line);
-        padding: 10px 14px; margin: 4px 0 18px 0; color: var(--muted); font-size: 0.9rem;
+
+    html, body {
+        font-family: "Aptos", "Segoe UI", Arial, sans-serif;
+        letter-spacing: 0;
     }
-    .block-container { max-width: 1480px; padding-top: 1.8rem; }
-    h1, h2, h3 { letter-spacing: 0; }
-    h1 { font-size: 2rem; margin-bottom: 0.15rem; }
-    .stButton > button, .stDownloadButton > button { border-radius: 5px; }
-    div[data-testid="stTabs"] div[role="tablist"] {
-        gap: 8px; padding: 6px; margin: 4px 0 14px 0; overflow-x: auto;
-        background: #eef0f1; border: 1px solid #d7dade; border-radius: 6px;
+    .stApp {
+        background: var(--canvas);
+        color: var(--ink);
+        font-family: "Aptos", "Segoe UI", Arial, sans-serif;
     }
-    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"] {
-        flex: 0 0 auto; min-height: 42px; padding: 8px 16px;
-        background: #ffffff; border: 1px solid #c8cdd1; border-radius: 5px;
-        color: #34393d; font-weight: 600; cursor: pointer;
+    [data-testid="stHeader"] {
+        background: rgba(244, 246, 245, 0.96);
+        border-bottom: 1px solid rgba(217, 223, 220, 0.8);
     }
-    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"]:hover {
-        background: #f8ece9; border-color: var(--accent); color: #923829;
+    .block-container {
+        max-width: 1440px;
+        padding: 4.75rem 2.2rem 4rem;
     }
-    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"][aria-selected="true"] {
-        background: var(--accent); border-color: var(--accent); color: #ffffff;
+
+    h1, h2, h3, p { letter-spacing: 0; }
+    h1 {
+        color: var(--ink);
+        font-size: 2.15rem;
+        line-height: 1.14;
+        margin: 0.15rem 0 0.35rem;
     }
-    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"][aria-selected="true"] p {
+    h2 { color: var(--ink); font-size: 1.25rem; }
+    h3 { color: var(--ink); font-size: 1.05rem; }
+    [data-testid="stCaptionContainer"] {
+        color: var(--muted);
+        font-size: 0.86rem;
+        line-height: 1.55;
+    }
+
+    section[data-testid="stSidebar"] {
+        width: 460px !important;
+        background: #fbfcfb;
+        border-right: 1px solid var(--line);
+    }
+    section[data-testid="stSidebar"] > div { width: 460px !important; }
+    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+        overflow-x: hidden;
+        overflow-y: hidden;
+        padding: 1.375rem 0.7rem 0 1.2rem;
+    }
+    section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+        margin-bottom: 0;
+    }
+    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
+        padding-bottom: 0;
+    }
+    .sidebar-kicker, .page-kicker, .workspace-kicker, .export-label {
+        color: var(--accent);
+        font-size: 0.72rem;
+        font-weight: 750;
+        line-height: 1.2;
+        letter-spacing: 0;
+        text-transform: uppercase;
+    }
+    .sidebar-title {
+        color: var(--ink);
+        font-size: 1.35rem;
+        font-weight: 720;
+        line-height: 1.25;
+        margin: 0.22rem 0 0.35rem;
+    }
+    .sidebar-copy {
+        color: var(--muted);
+        font-size: 0.86rem;
+        line-height: 1.5;
+        margin: 0 0 0.9rem;
+    }
+    .sidebar-section {
+        border-top: 1px solid var(--line);
+        color: var(--ink);
+        font-size: 0.77rem;
+        font-weight: 720;
+        letter-spacing: 0;
+        margin: 1.1rem 0 0.65rem;
+        padding-top: 0.9rem;
+        text-transform: uppercase;
+    }
+    section[data-testid="stSidebar"] label p {
+        color: #34413d;
+        font-size: 0.82rem;
+        font-weight: 600;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="input"],
+    section[data-testid="stSidebar"] [data-baseweb="select"] > div {
+        background: var(--surface);
+        border-color: var(--line-strong);
+        border-radius: 6px;
+    }
+    section[data-testid="stSidebar"] [data-baseweb="input"]:focus-within,
+    section[data-testid="stSidebar"] [data-baseweb="select"] > div:focus-within {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent);
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        margin-bottom: 0.55rem;
+    }
+    section[data-testid="stSidebar"] [data-testid="stExpander"] details summary {
+        min-height: 2.75rem;
+    }
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
+        background: var(--surface);
+        border-color: var(--line);
+        border-radius: 6px;
+    }
+
+    .stButton button, .stDownloadButton button {
+        border-radius: 6px;
+        font-weight: 650;
+        min-height: 2.35rem;
+        transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+    }
+    .stButton button:hover, .stDownloadButton button:hover {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+    }
+    [data-testid="stFormSubmitButton"] button {
+        min-height: 2.75rem;
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #ffffff;
+        font-weight: 700;
+    }
+    [data-testid="stFormSubmitButton"] button:hover {
+        background: var(--accent-strong);
+        border-color: var(--accent-strong);
         color: #ffffff;
     }
-    div[data-testid="stTabs"] .react-aria-SelectionIndicator { display: none; }
+    /* Two-column sidebar: the left column holds all inputs and scrolls on its
+       own; the right column holds only the Calculate button. The sidebar's
+       own scroll container is disabled (position: sticky is unreliable inside
+       it in this DOM: the absolutely-positioned flex app container breaks it),
+       so instead the input column becomes the scroller and the button rail
+       sits beside it as a fixed sibling that never moves. The in-flow sidebar
+       header occupies the top 82px (22px content padding + 60px header in
+       Streamlit 1.63), which is reserved so nothing overlaps the collapse
+       control. */
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) {
+        align-items: stretch;
+        gap: 0.7rem !important;
+    }
+    /* Note the child combinator: a descendant selector would also match the
+       first column of every inner st.columns() row inside the input column,
+       stretching each widget row to the full visible height. */
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
+    > [data-testid="stColumn"]:first-child {
+        height: calc(100vh - 82px);
+        overflow-y: auto;
+        overscroll-behavior-y: contain;
+        padding: 0 0 1.5rem;
+        scrollbar-gutter: stable;
+    }
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
+    > [data-testid="stColumn"]:first-child::-webkit-scrollbar {
+        width: 8px;
+    }
+    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
+    > [data-testid="stColumn"]:first-child::-webkit-scrollbar-thumb {
+        background: var(--line-strong);
+        border-radius: 4px;
+    }
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail {
+        flex: 0 0 auto;
+        height: calc(100vh - 82px);
+        min-height: calc(100vh - 82px);
+        overflow: visible;
+        position: relative;
+        z-index: 1;
+    }
+    /* Percentage heights cannot resolve here (the rail sits in a flex-content-
+       sized column), so the button fills the rail with absolute positioning
+       instead of a height: 100% chain. */
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail
+    [data-testid="stElementContainer"] {
+        position: absolute;
+        inset: 0;
+    }
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button {
+        align-items: center;
+        background: var(--accent);
+        border-color: var(--accent);
+        border-radius: 6px;
+        box-shadow: 0 3px 10px rgba(24, 33, 31, 0.14);
+        color: #ffffff;
+        display: flex;
+        flex-direction: column;
+        inset: 0;
+        justify-content: space-between;
+        padding: 1rem 0.45rem;
+        position: absolute;
+    }
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button:hover {
+        background: var(--accent-strong);
+        border-color: var(--accent-strong);
+        color: #ffffff;
+    }
+    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"],
+    [data-testid="stExpandSidebarButton"],
+    [data-testid="stSidebarCollapsedControl"] {
+        pointer-events: auto !important;
+        z-index: 5 !important;
+    }
+    /* When the sidebar is collapsed its content slides off-canvas but still
+       overlaps the main area (the sidebar section keeps a high z-index), so
+       the pinned button would paint over the main content and the header
+       would intercept clicks aimed at the expand control. Hide the rail and
+       let pointer events pass through to the main area. */
+    section[data-testid="stSidebar"][aria-expanded="false"] .st-key-scenario-action-rail {
+        visibility: hidden;
+    }
+    section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarContent"] {
+        pointer-events: none;
+    }
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail
+    .stButton button::before,
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail
+    .stButton button::after {
+        content: "\\2192";
+        display: block;
+        flex: 0 0 auto;
+        font-family: "Segoe UI Symbol", sans-serif;
+        font-size: 1.55rem;
+        line-height: 1;
+    }
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button p {
+        font-size: 0.9rem;
+        line-height: 1.25;
+        white-space: nowrap;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+    }
+    .stDownloadButton button {
+        background: var(--surface);
+        border-color: var(--line);
+        color: #40504b;
+    }
+
+    .page-kicker { margin-bottom: 0.35rem; }
+    .page-deck {
+        color: var(--muted);
+        font-size: 1rem;
+        line-height: 1.55;
+        margin: 0 0 1.15rem;
+        max-width: 760px;
+    }
+    .model-strip {
+        align-items: center;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-left: 3px solid var(--accent);
+        border-radius: 6px;
+        color: var(--muted);
+        display: flex;
+        flex-wrap: wrap;
+        font-size: 0.8rem;
+        gap: 0.35rem 0;
+        margin: 0 0 1.25rem;
+        min-height: 42px;
+        padding: 0.65rem 0.85rem;
+    }
+    .model-strip strong { color: var(--ink); font-weight: 700; }
+    .model-item {
+        border-right: 1px solid var(--line);
+        margin-right: 0.75rem;
+        padding-right: 0.75rem;
+    }
+    .model-item:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
+
+    .scenario-bar {
+        align-items: center;
+        background: var(--surface-subtle);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: #475650;
+        display: flex;
+        flex-wrap: wrap;
+        font-size: 0.82rem;
+        gap: 0.45rem 1.15rem;
+        margin: 0 0 1rem;
+        min-height: 44px;
+        padding: 0.65rem 0.85rem;
+    }
+    .scenario-bar strong { color: var(--ink); }
+    .scenario-label { color: var(--teal); font-weight: 750; text-transform: uppercase; }
+    .scenario-pending {
+        background: #f6ecd8;
+        border: 1px solid #e3cf9e;
+        border-radius: 4px;
+        color: #8a6414;
+        font-weight: 650;
+        padding: 0.1rem 0.55rem;
+    }
+
+    [data-testid="stMetric"] {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(24, 33, 31, 0.04);
+        min-height: 114px;
+        overflow: hidden;
+        padding: 0.95rem 1rem;
+        position: relative;
+    }
+    [data-testid="stMetric"]::before {
+        background: var(--accent);
+        content: "";
+        height: 3px;
+        left: 0;
+        position: absolute;
+        right: 0;
+        top: 0;
+    }
+    [data-testid="stMetricLabel"] p {
+        color: var(--muted);
+        font-size: 0.79rem;
+        font-weight: 650;
+        line-height: 1.35;
+        white-space: normal;
+    }
+    [data-testid="stMetricValue"] {
+        color: var(--ink);
+        font-size: 1.48rem;
+        line-height: 1.2;
+    }
+    [data-testid="stMetricDelta"] { color: var(--muted); }
+
+    .workspace-kicker { margin: 1.55rem 0 0.35rem; }
+    div[data-testid="stTabs"] div[role="tablist"] {
+        background: transparent;
+        border-bottom: 1px solid var(--line-strong);
+        border-radius: 0;
+        gap: 1.6rem;
+        margin: 0 0 1.2rem;
+        overflow-x: auto;
+        padding: 0;
+    }
+    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"] {
+        background: transparent;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        border-radius: 0;
+        color: var(--muted);
+        flex: 0 0 auto;
+        font-weight: 650;
+        min-height: 44px;
+        padding: 0.6rem 0.1rem 0.7rem;
+    }
+    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"]:hover {
+        background: transparent;
+        color: var(--accent-strong);
+    }
+    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"][aria-selected="true"] {
+        background: transparent;
+        border-bottom-color: var(--accent);
+        color: var(--accent-strong);
+    }
+    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"][aria-selected="true"] p {
+        color: var(--accent-strong);
+    }
+    div[data-testid="stTabs"] .react-aria-SelectionIndicator,
     div[data-testid="stTabs"] div[data-baseweb="tab-highlight"],
     div[data-testid="stTabs"] div[data-baseweb="tab-border"] { display: none; }
-    @media (max-width: 700px) {
-        .block-container { padding: 1rem 0.75rem; }
-        h1 { font-size: 1.65rem; }
-        [data-testid="stMetric"] { min-height: 94px; }
-        div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"] {
-            min-height: 40px; padding: 7px 12px;
+
+    .tab-intro { margin: 0.15rem 0 1rem; max-width: 900px; }
+    .tab-intro h2 {
+        font-size: 1.18rem;
+        line-height: 1.3;
+        margin: 0 0 0.25rem;
+    }
+    .tab-intro p {
+        color: var(--muted);
+        font-size: 0.88rem;
+        line-height: 1.55;
+        margin: 0;
+    }
+    .chart-divider {
+        border-top: 1px solid var(--line);
+        margin: 1.65rem 0 1rem;
+        padding-top: 1.15rem;
+    }
+    .chart-divider h3 { font-size: 1rem; margin: 0 0 0.2rem; }
+    .chart-divider p { color: var(--muted); font-size: 0.84rem; margin: 0; }
+    div[data-testid="stPlotlyChart"] {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: 0 1px 2px rgba(24, 33, 31, 0.03);
+        overflow: hidden;
+        padding: 0.2rem;
+    }
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .export-label { color: var(--muted); margin: 0.65rem 0 0.35rem; }
+
+    @media (max-width: 900px) {
+        section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div {
+            width: min(460px, 94vw) !important;
         }
+        section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) {
+            gap: 0.5rem !important;
+        }
+        .block-container { padding: 4.5rem 1rem 3rem; }
+        .model-item { border-right: 0; }
+    }
+    @media (max-width: 640px) {
+        .block-container { padding: 4.25rem 0.75rem 2.5rem; }
+        h1 { font-size: 1.8rem; }
+        .page-deck { font-size: 0.92rem; }
+        [data-testid="stMetric"] { min-height: 98px; }
+        div[data-testid="stTabs"] div[role="tablist"] { gap: 1.1rem; }
+        .scenario-bar { align-items: flex-start; flex-direction: column; gap: 0.25rem; }
     }
     </style>
     """,
@@ -232,8 +620,73 @@ def _widget_state_from_scenario(
 def _reset_to_paper_baseline() -> None:
     baseline_state = _widget_state_from_scenario(Scenario())
     st.session_state.update({key: baseline_state[key] for key in WIDGET_KEYS})
+    st.session_state["committed_widgets"] = {key: st.session_state[key] for key in WIDGET_KEYS}
     st.session_state["form_generation"] = st.session_state.get("form_generation", 0) + 1
     st.query_params.clear()
+
+
+def _snapshot_widgets() -> dict[str, bool | float | int | str]:
+    return {key: st.session_state[key] for key in WIDGET_KEYS}
+
+
+def _scenario_from_widgets(widgets: dict[str, bool | float | int | str]) -> Scenario:
+    archive_multiplier = {"TB": 1, "PB": 1000, "EB": 1_000_000}[widgets["archive_unit"]]
+    asset_multiplier = {"MB": 1, "GB": 1000}[widgets["asset_unit"]]
+    technologies = tuple(
+        technology
+        for selected, technology in (
+            (widgets["tech_dna"], "DNA"),
+            (widgets["tech_amazon"], "Amazon Deep Archive"),
+            (widgets["tech_azure"], "Azure Blob Archive"),
+            (widgets["tech_tape"], "Tape On-premise"),
+            (widgets["tech_custom"], "Custom storage"),
+        )
+        if selected
+    )
+    return Scenario(
+        archive_size_tb=widgets["archive_value"] * archive_multiplier,
+        average_asset_size_mb=widgets["asset_value"] * asset_multiplier,
+        annual_retrieval_percent=widgets["retrieval"],
+        start_year=int(widgets["start_year_widget"]),
+        horizon_years=int(widgets["horizon"]),
+        discount_rate_percent=widgets["discount"],
+        dna_cost_base_year=int(widgets["dna_cost_base_year"]),
+        dna_synthesis_cost_per_mb=widgets["dna_synthesis_cost"],
+        dna_sequencing_cost_per_mb=widgets["dna_sequencing_cost"],
+        synthesis_decline_percent=widgets["synthesis_decline"],
+        sequencing_decline_percent=widgets["sequencing_decline"],
+        amazon_price_base_year=int(widgets["amazon_base_year"]),
+        amazon_put_usd_per_request=widgets["amazon_put_per_1000"] / 1_000,
+        amazon_bulk_restore_usd_per_request=widgets["amazon_restore_per_1000"] / 1_000,
+        amazon_bulk_retrieval_usd_per_mb=widgets["amazon_retrieval_per_tb"] / 1_000_000,
+        amazon_storage_usd_per_mb_month=widgets["amazon_storage_per_tb_month"] / 1_000_000,
+        amazon_decline_percent=widgets["amazon_decline"],
+        azure_price_base_year=int(widgets["azure_base_year"]),
+        azure_write_usd_per_request=widgets["azure_write_per_1000"] / 1_000,
+        azure_read_usd_per_request=widgets["azure_read_per_1000"] / 1_000,
+        azure_retrieval_usd_per_mb=widgets["azure_retrieval_per_tb"] / 1_000_000,
+        azure_storage_usd_per_mb_month=widgets["azure_storage_per_tb_month"] / 1_000_000,
+        azure_decline_percent=widgets["azure_decline"],
+        tape_price_base_year=int(widgets["tape_base_year"]),
+        tape_media_usd_per_tb=widgets["tape_media_per_tb"],
+        tape_hardware_usd_per_tb=widgets["tape_hardware_per_tb"],
+        tape_energy_usd_per_tb_year=widgets["tape_energy_per_tb_year"],
+        tape_media_decline_percent=widgets["tape_media_decline"],
+        tape_hardware_decline_percent=widgets["tape_hardware_decline"],
+        tape_energy_decline_percent=widgets["tape_energy_decline"],
+        dna_durability_years=int(widgets["dna_durability"]),
+        tape_durability_years=int(widgets["tape_durability"]),
+        custom_storage_name=widgets["custom_name"],
+        custom_cost_base_year=int(widgets["custom_base_year"]),
+        custom_write_cost_per_tb=widgets["custom_write_tb"],
+        custom_write_cost_per_asset=widgets["custom_write_asset"],
+        custom_storage_cost_per_tb_year=widgets["custom_storage_tb_year"],
+        custom_retrieval_cost_per_tb=widgets["custom_retrieval_tb"],
+        custom_retrieval_cost_per_asset=widgets["custom_retrieval_asset"],
+        custom_decline_percent=widgets["custom_decline"],
+        custom_replacement_years=int(widgets["custom_replacement"]),
+        technologies=technologies,
+    )
 
 
 def _money(value: float) -> str:
@@ -246,12 +699,28 @@ def _money(value: float) -> str:
     return f"${value:,.3g}"
 
 
+def _quantity(value: float) -> str:
+    absolute = abs(value)
+    for threshold, suffix in ((1e15, "Q"), (1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if absolute >= threshold:
+            return f"{value / threshold:,.2f}{suffix}"
+    return f"{value:,.0f}"
+
+
+def _section_intro(title: str, description: str) -> None:
+    st.markdown(
+        f'<div class="tab-intro"><h2>{title}</h2><p>{description}</p></div>',
+        unsafe_allow_html=True,
+    )
+
+
 def _chart_downloads(
     key: str,
     csv_data: bytes,
     filename_base: str,
     image_exports: dict[str, bytes],
 ) -> None:
+    st.markdown('<div class="export-label">Export chart</div>', unsafe_allow_html=True)
     columns = st.columns(3)
     columns[0].download_button(
         "CSV",
@@ -309,21 +778,35 @@ def _cached_dna_costs(scenario: Scenario, final_year: int) -> pd.DataFrame:
 
 initial = _initial_scenario()
 query = _query_mapping()
-for widget_key, default_value in _widget_state_from_scenario(initial, query).items():
+initial_widgets = _widget_state_from_scenario(initial, query)
+for widget_key, default_value in initial_widgets.items():
     st.session_state.setdefault(widget_key, default_value)
+# The graphs only follow the last calculated inputs: the initial load counts
+# as the first calculation, and the Calculate button is the only other way
+# to commit widget changes.
+st.session_state.setdefault("committed_widgets", dict(initial_widgets))
+committed_widgets = st.session_state["committed_widgets"]
+pending = _snapshot_widgets() != committed_widgets
 
 with st.sidebar:
-    st.header("Scenario")
-    st.button(
-        "Reset to paper baseline",
-        key="reset_baseline",
-        on_click=_reset_to_paper_baseline,
-        width="stretch",
-    )
-
-    form_key = f"scenario_form_{st.session_state.get('form_generation', 0)}"
-    with st.form(form_key):
-        st.caption("Workload and time")
+    input_column, action_column = st.columns([6, 1], gap="small")
+    with input_column:
+        st.markdown(
+            """
+            <div class="sidebar-kicker">Scenario builder</div>
+            <div class="sidebar-title">Model inputs</div>
+            <p class="sidebar-copy">Archive workload, time horizon, and technology assumptions.</p>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.button(
+            "Reset to paper baseline",
+            key="reset_baseline",
+            on_click=_reset_to_paper_baseline,
+            icon=":material/refresh:",
+            width="stretch",
+        )
+        st.markdown('<div class="sidebar-section">Workload and time</div>', unsafe_allow_html=True)
         col_a, col_b = st.columns([2, 1])
         with col_a:
             archive_input = st.number_input(
@@ -379,7 +862,7 @@ with st.sidebar:
                 help="Real rate used to discount future payments to the storage start year. Use 0 for undiscounted costs.",
             )
 
-        st.caption("Chart display")
+        st.markdown('<div class="sidebar-section">Display</div>', unsafe_allow_html=True)
         chart_col_a, chart_col_b = st.columns([1.4, 1])
         with chart_col_a:
             projection_end = st.number_input(
@@ -393,27 +876,28 @@ with st.sidebar:
                 help="Recommended when technologies differ by several orders of magnitude.",
             )
 
-        st.caption("Storage technologies")
+        st.markdown('<div class="sidebar-section">Technologies</div>', unsafe_allow_html=True)
         with st.container(border=True):
             tech_col_a, tech_col_b = st.columns(2)
             with tech_col_a:
                 tech_dna = st.checkbox(
-                    "DNA", key="tech_dna",
+                    "DNA", key="tech_dna", help="Archival storage using DNA synthesis and sequencing.",
                 )
                 tech_amazon = st.checkbox(
-                    "Amazon", key="tech_amazon",
+                    "Amazon S3", key="tech_amazon", help="Amazon S3 Glacier Deep Archive.",
                 )
                 tech_tape = st.checkbox(
-                    "Tape", key="tech_tape",
+                    "Tape", key="tech_tape", help="On-premise tape storage with periodic media replacement.",
                 )
             with tech_col_b:
                 tech_azure = st.checkbox(
-                    "Azure", key="tech_azure",
+                    "Azure Blob", key="tech_azure", help="Microsoft Azure Blob Storage Archive tier.",
                 )
                 tech_custom = st.checkbox(
-                    "Custom", key="tech_custom",
+                    "Custom", key="tech_custom", help="User-defined storage cost model.",
                 )
 
+        st.markdown('<div class="sidebar-section">Cost assumptions</div>', unsafe_allow_html=True)
         with st.expander("DNA cost assumptions"):
             dna_cost_base_year = st.number_input(
                 "DNA cost base year", min_value=2000, max_value=2500,
@@ -614,78 +1098,105 @@ with st.sidebar:
                 help="Years between complete rewrites. Use 0 for a service with no replacement writes.",
             )
 
-        submitted = st.form_submit_button("Calculate scenario", type="primary", width="stretch")
+    with action_column:
+        with st.container(key="scenario-action-rail"):
+            submitted = st.button(
+                "Calculate scenario",
+                type="primary",
+                key="calculate_scenario",
+                help=(
+                    "Graphs are out of date — apply the current model inputs."
+                    if pending
+                    else "Apply the current model inputs and update all graphs."
+                ),
+                width="stretch",
+            )
 
-technologies = tuple(
-    technology
-    for selected, technology in (
-        (tech_dna, "DNA"),
-        (tech_amazon, "Amazon Deep Archive"),
-        (tech_azure, "Azure Blob Archive"),
-        (tech_tape, "Tape On-premise"),
-        (tech_custom, "Custom storage"),
+if submitted:
+    technologies = tuple(
+        technology
+        for selected, technology in (
+            (tech_dna, "DNA"),
+            (tech_amazon, "Amazon Deep Archive"),
+            (tech_azure, "Azure Blob Archive"),
+            (tech_tape, "Tape On-premise"),
+            (tech_custom, "Custom storage"),
+        )
+        if selected
     )
-    if selected
-)
-if not technologies:
-    st.error("Select at least one storage technology.")
-    st.stop()
+    archive_multiplier = {"TB": 1, "PB": 1000, "EB": 1_000_000}[archive_unit_input]
+    asset_multiplier = {"MB": 1, "GB": 1000}[asset_unit_input]
+    try:
+        candidate = Scenario(
+            archive_size_tb=archive_input * archive_multiplier,
+            average_asset_size_mb=asset_input * asset_multiplier,
+            annual_retrieval_percent=retrieval,
+            start_year=int(start_year),
+            horizon_years=int(horizon),
+            discount_rate_percent=discount,
+            dna_cost_base_year=int(dna_cost_base_year),
+            dna_synthesis_cost_per_mb=dna_synthesis_cost,
+            dna_sequencing_cost_per_mb=dna_sequencing_cost,
+            synthesis_decline_percent=synthesis_decline,
+            sequencing_decline_percent=sequencing_decline,
+            amazon_price_base_year=int(amazon_base_year),
+            amazon_put_usd_per_request=amazon_put_per_1000 / 1_000,
+            amazon_bulk_restore_usd_per_request=amazon_restore_per_1000 / 1_000,
+            amazon_bulk_retrieval_usd_per_mb=amazon_retrieval_per_tb / 1_000_000,
+            amazon_storage_usd_per_mb_month=amazon_storage_per_tb_month / 1_000_000,
+            amazon_decline_percent=amazon_decline,
+            azure_price_base_year=int(azure_base_year),
+            azure_write_usd_per_request=azure_write_per_1000 / 1_000,
+            azure_read_usd_per_request=azure_read_per_1000 / 1_000,
+            azure_retrieval_usd_per_mb=azure_retrieval_per_tb / 1_000_000,
+            azure_storage_usd_per_mb_month=azure_storage_per_tb_month / 1_000_000,
+            azure_decline_percent=azure_decline,
+            tape_price_base_year=int(tape_base_year),
+            tape_media_usd_per_tb=tape_media_per_tb,
+            tape_hardware_usd_per_tb=tape_hardware_per_tb,
+            tape_energy_usd_per_tb_year=tape_energy_per_tb_year,
+            tape_media_decline_percent=tape_media_decline,
+            tape_hardware_decline_percent=tape_hardware_decline,
+            tape_energy_decline_percent=tape_energy_decline,
+            dna_durability_years=int(dna_durability),
+            tape_durability_years=int(tape_durability),
+            custom_storage_name=custom_name,
+            custom_cost_base_year=int(custom_base_year),
+            custom_write_cost_per_tb=custom_write_tb,
+            custom_write_cost_per_asset=custom_write_asset,
+            custom_storage_cost_per_tb_year=custom_storage_tb_year,
+            custom_retrieval_cost_per_tb=custom_retrieval_tb,
+            custom_retrieval_cost_per_asset=custom_retrieval_asset,
+            custom_decline_percent=custom_decline,
+            custom_replacement_years=int(custom_replacement),
+            technologies=technologies,
+        )
+    except ValueError as error:
+        st.error(str(error))
+        st.stop()
+    if not candidate.technologies:
+        st.error("Select at least one storage technology.")
+        st.stop()
+    st.session_state["committed_widgets"] = _snapshot_widgets()
+    params = candidate.to_query_params()
+    params.update({"projection_end": str(int(projection_end)), "log_scale": str(log_scale)})
+    st.query_params.from_dict(params)
 
-archive_multiplier = {"TB": 1, "PB": 1000, "EB": 1_000_000}[archive_unit_input]
-asset_multiplier = {"MB": 1, "GB": 1000}[asset_unit_input]
+committed_widgets = st.session_state["committed_widgets"]
+pending = _snapshot_widgets() != committed_widgets
+
+# All graphs render from the last calculated inputs; live widget edits do not
+# touch them until the Calculate button commits a new snapshot.
 try:
-    scenario = Scenario(
-        archive_size_tb=archive_input * archive_multiplier,
-        average_asset_size_mb=asset_input * asset_multiplier,
-        annual_retrieval_percent=retrieval,
-        start_year=int(start_year),
-        horizon_years=int(horizon),
-        discount_rate_percent=discount,
-        dna_cost_base_year=int(dna_cost_base_year),
-        dna_synthesis_cost_per_mb=dna_synthesis_cost,
-        dna_sequencing_cost_per_mb=dna_sequencing_cost,
-        synthesis_decline_percent=synthesis_decline,
-        sequencing_decline_percent=sequencing_decline,
-        amazon_price_base_year=int(amazon_base_year),
-        amazon_put_usd_per_request=amazon_put_per_1000 / 1_000,
-        amazon_bulk_restore_usd_per_request=amazon_restore_per_1000 / 1_000,
-        amazon_bulk_retrieval_usd_per_mb=amazon_retrieval_per_tb / 1_000_000,
-        amazon_storage_usd_per_mb_month=amazon_storage_per_tb_month / 1_000_000,
-        amazon_decline_percent=amazon_decline,
-        azure_price_base_year=int(azure_base_year),
-        azure_write_usd_per_request=azure_write_per_1000 / 1_000,
-        azure_read_usd_per_request=azure_read_per_1000 / 1_000,
-        azure_retrieval_usd_per_mb=azure_retrieval_per_tb / 1_000_000,
-        azure_storage_usd_per_mb_month=azure_storage_per_tb_month / 1_000_000,
-        azure_decline_percent=azure_decline,
-        tape_price_base_year=int(tape_base_year),
-        tape_media_usd_per_tb=tape_media_per_tb,
-        tape_hardware_usd_per_tb=tape_hardware_per_tb,
-        tape_energy_usd_per_tb_year=tape_energy_per_tb_year,
-        tape_media_decline_percent=tape_media_decline,
-        tape_hardware_decline_percent=tape_hardware_decline,
-        tape_energy_decline_percent=tape_energy_decline,
-        dna_durability_years=int(dna_durability),
-        tape_durability_years=int(tape_durability),
-        custom_storage_name=custom_name,
-        custom_cost_base_year=int(custom_base_year),
-        custom_write_cost_per_tb=custom_write_tb,
-        custom_write_cost_per_asset=custom_write_asset,
-        custom_storage_cost_per_tb_year=custom_storage_tb_year,
-        custom_retrieval_cost_per_tb=custom_retrieval_tb,
-        custom_retrieval_cost_per_asset=custom_retrieval_asset,
-        custom_decline_percent=custom_decline,
-        custom_replacement_years=int(custom_replacement),
-        technologies=technologies,
-    )
+    scenario = _scenario_from_widgets(committed_widgets)
 except ValueError as error:
     st.error(str(error))
     st.stop()
-
-if submitted:
-    params = scenario.to_query_params()
-    params.update({"projection_end": str(projection_end), "log_scale": str(log_scale)})
-    st.query_params.from_dict(params)
+if not scenario.technologies:
+    st.error("Select at least one storage technology.")
+    st.stop()
+projection_end = int(committed_widgets["projection_end"])
+log_scale = bool(committed_widgets["log_scale"])
 
 result = _cached_simulation(scenario)
 projection = _cached_projection(scenario, int(projection_end))
@@ -697,14 +1208,20 @@ dna_costs = _cached_dna_costs(scenario, dna_curve_end)
 use_present_value = scenario.discount_rate_percent > 0
 value_column = "present_value_usd" if use_present_value else "total_cost_usd"
 
+st.markdown('<div class="page-kicker">Archival storage economics</div>', unsafe_allow_html=True)
 st.title("DNA Storage Cost Explorer")
-st.caption("Lifecycle scenarios for archival DNA, cloud, and tape storage")
+st.markdown(
+    '<p class="page-deck">Compare the long-run cost of DNA, cloud archive, tape, and custom storage '
+    'under one consistent workload.</p>',
+    unsafe_allow_html=True,
+)
 st.markdown(
     f"""
     <div class="model-strip">
-    Model v{result.metadata['model_version']} &nbsp;|&nbsp; {result.metadata['currency']}
-    &nbsp;|&nbsp; assumptions reviewed {result.metadata['last_reviewed']}
-    &nbsp;|&nbsp; {result.metadata['disclaimer']}
+        <span class="model-item"><strong>Model v{result.metadata['model_version']}</strong></span>
+        <span class="model-item">{result.metadata['currency']}</span>
+        <span class="model-item">Reviewed {result.metadata['last_reviewed']}</span>
+        <span class="model-item">{result.metadata['disclaimer']}</span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -712,14 +1229,42 @@ st.markdown(
 
 totals = result.totals.sort_values(value_column)
 cheapest = totals.iloc[0]
+cheapest_name = str(cheapest["technology"])
+cheapest_label = cheapest_name if len(cheapest_name) <= 26 else f"{cheapest_name[:25]}..."
 dna_rows = totals[totals["technology"] == "DNA"]
 dna_total = float(dna_rows.iloc[0][value_column]) if not dna_rows.empty else None
+period_end = scenario.start_year + scenario.horizon_years - 1
+cost_basis = "Present value" if use_present_value else "Undiscounted"
+scale_label = "Log scale" if log_scale else "Linear scale"
+
+pending_chip = (
+    '<span class="scenario-pending">Changes pending — press Calculate</span>' if pending else ""
+)
+st.markdown(
+    f"""
+    <div class="scenario-bar">
+        <span class="scenario-label">Active scenario</span>
+        <span><strong>{scenario.start_year}-{period_end}</strong> archive period</span>
+        <span><strong>{len(scenario.technologies)}</strong> technologies</span>
+        <span>{cost_basis}</span>
+        <span>{scale_label}</span>
+        {pending_chip}
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 metric_columns = st.columns(4)
 metric_columns[0].metric("Archive", f"{scenario.archive_size_tb:,.3g} TB")
-metric_columns[1].metric("Assets", f"{scenario.number_of_assets:,.0f}")
+metric_columns[1].metric(
+    "Data objects",
+    _quantity(scenario.number_of_assets),
+    help=f"{scenario.number_of_assets:,.0f} total data objects",
+)
 metric_columns[2].metric(
-    f"Lowest: {cheapest['technology']}", _money(float(cheapest[value_column]))
+    f"Lowest: {cheapest_label}",
+    _money(float(cheapest[value_column])),
+    help=f"Lowest lifecycle cost: {cheapest_name}",
 )
 if dna_total is None:
     metric_columns[3].metric("Annual retrieval", f"{scenario.annual_retrieval_percent:,.2f}%")
@@ -727,18 +1272,22 @@ else:
     lowest_cost = float(cheapest[value_column])
     if lowest_cost > 0:
         ratio = dna_total / lowest_cost
-        metric_columns[3].metric(f"DNA cost ({ratio:,.2g}x lowest)", _money(dna_total))
+        metric_columns[3].metric(
+            "DNA lifecycle cost", _money(dna_total), f"{ratio:,.2g}x lowest", delta_color="off"
+        )
     else:
         metric_columns[3].metric("DNA lifecycle cost", _money(dna_total))
 
+st.markdown('<div class="workspace-kicker">Analysis workspace</div>', unsafe_allow_html=True)
 overview_tab, outlook_tab, dna_cost_tab, assumptions_tab = st.tabs(
     ["Lifecycle", "Start-year outlook", "DNA unit costs", "Assumptions"]
 )
 
 with overview_tab:
-    st.caption(
+    _section_intro(
+        "Lifecycle comparison",
         "Cumulative lifecycle cost for one archive opened in the selected start year. "
-        "Each line adds initial writes, replacement writes, annual storage/operation, and expected retrieval."
+        "Each line includes initial and replacement writes, storage or operation, and expected retrieval.",
     )
     lifecycle_figure = lifecycle_chart(result, use_present_value, log_scale)
     st.plotly_chart(
@@ -753,9 +1302,14 @@ with overview_tab:
         "dna-storage-lifecycle",
         lifecycle_files,
     )
-    st.caption(
-        "The component chart separates undiscounted write and replacement costs, retrieval costs, "
-        "and recurring storage or operating costs over the full retention horizon."
+    st.markdown(
+        """
+        <div class="chart-divider">
+            <h3>Cost composition</h3>
+            <p>Undiscounted write and replacement, retrieval, and recurring storage or operating costs.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
     breakdown_figure = breakdown_chart(result, log_scale)
     st.plotly_chart(
@@ -774,10 +1328,11 @@ with overview_tab:
     )
 
 with outlook_tab:
-    st.caption(
+    _section_intro(
+        "Start-year sensitivity",
         "The same archive workload and retention horizon are recalculated for every possible storage "
         "start year. A crossover is the first start year for which DNA's lifecycle cost is no greater "
-        "than the comparison technology."
+        "than the comparison technology.",
     )
     projection_figure = projection_chart(projection, use_present_value, log_scale)
     st.plotly_chart(
@@ -790,6 +1345,15 @@ with outlook_tab:
         projection.to_csv(index=False).encode("utf-8"),
         "dna-storage-start-year-outlook",
         projection_exports(projection, use_present_value, log_scale, result.metadata),
+    )
+    st.markdown(
+        """
+        <div class="chart-divider">
+            <h3>Crossover years</h3>
+            <p>First modeled start year in which DNA reaches or undercuts each comparison technology.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
     crossovers = find_crossover_years(projection)
     if crossovers:
@@ -805,10 +1369,11 @@ with outlook_tab:
         st.info("Include DNA and at least one comparison technology to calculate crossover years.")
 
 with dna_cost_tab:
-    st.caption(
+    _section_intro(
+        "DNA unit economics",
         f"Both curves begin with the editable {scenario.dna_cost_base_year} unit costs and apply the "
         f"selected annual decline rates through {dna_curve_end}. They are unit-cost assumptions, "
-        "not lifecycle totals."
+        "not lifecycle totals.",
     )
     chart_columns = st.columns(2)
     with chart_columns[0]:
@@ -818,7 +1383,7 @@ with dna_cost_tab:
                 dna_costs,
                 "synthesis_cost_usd_per_mb",
                 synthesis_title,
-                "#b44737",
+                "#bd4b38",
                 log_scale,
             ),
             width="stretch",
@@ -837,7 +1402,7 @@ with dna_cost_tab:
                 dna_costs,
                 "synthesis_cost_usd_per_mb",
                 synthesis_title,
-                "#b44737",
+                "#bd4b38",
                 log_scale,
                 result.metadata,
             ),
@@ -876,7 +1441,10 @@ with dna_cost_tab:
 
 with assumptions_tab:
     assumptions = load_assumptions()
-    st.subheader("Scenario contract")
+    _section_intro(
+        "Assumptions and scope",
+        "A concise record of the active scenario, included cost categories, and source references.",
+    )
     contract = pd.DataFrame(
         [
             ("Archive period", f"{scenario.start_year}-{scenario.start_year + scenario.horizon_years - 1}"),
@@ -914,15 +1482,18 @@ with assumptions_tab:
         ],
         columns=["Item", "Value"],
     )
-    st.dataframe(contract, hide_index=True, width="stretch")
-
-    st.subheader("Cost scope")
-    st.write(
-        "Included: DNA synthesis and sequencing, cloud write/retrieval/storage charges, "
-        "tape media/hardware/energy assumptions, and the selected custom capacity/request charges. "
-        "Excluded: labor, cloud egress, taxes, "
-        "retrieval latency, minimum-storage penalties, facilities, and unmodeled migrations."
-    )
-    st.subheader("Sources")
-    for source in assumptions["sources"].values():
-        st.markdown(f"- [{source['label']}]({source['url']})")
+    contract_column, context_column = st.columns([1.45, 1], gap="large")
+    with contract_column:
+        st.subheader("Scenario contract")
+        st.dataframe(contract, hide_index=True, width="stretch")
+    with context_column:
+        st.subheader("Cost scope")
+        st.write(
+            "Included: DNA synthesis and sequencing, cloud write/retrieval/storage charges, "
+            "tape media/hardware/energy assumptions, and the selected custom capacity/request charges. "
+            "Excluded: labor, cloud egress, taxes, retrieval latency, minimum-storage penalties, "
+            "facilities, and unmodeled migrations."
+        )
+        st.subheader("Sources")
+        for source in assumptions["sources"].values():
+            st.markdown(f"- [{source['label']}]({source['url']})")
