@@ -2342,17 +2342,28 @@ with st.container(key="cost-panel"):
             help="Years between complete tape media replacement writes.",
         )
         st.caption("Base-year prices")
+        st.caption(
+            "Tape cartridge and hardware values are added together. If your hardware estimate already "
+            "includes cartridges/media, set tape cartridges to 0 to avoid double counting."
+        )
         tape_media_per_tb = st.number_input(
-            "Tape media (USD/TB)", min_value=0.0,
+            "Tape cartridges (USD/TB per write)", min_value=0.0,
             format="%.6f",
             key="tape_media_per_tb",
-            help="Media purchase cost for one TB, charged on the initial write and every replacement.",
+            help=(
+                "Physical tape cartridge/media cost for one TB. The model charges it on the initial "
+                "archive write and on each replacement write. Set this to 0 if the hardware value "
+                "already includes cartridges."
+            ),
         )
         tape_hardware_per_tb = st.number_input(
-            "Hardware (USD/TB)", min_value=0.0,
+            "Tape library/drives (USD/TB amortized)", min_value=0.0,
             format="%.6f",
             key="tape_hardware_per_tb",
-            help="Hardware cost allocated per TB and amortized over the selected durability period.",
+            help=(
+                "Tape library, drive, robotics, and supporting hardware cost allocated per TB. The "
+                "model spreads this over the selected tape durability period as annual maintenance."
+            ),
         )
         tape_energy_per_tb_year = st.number_input(
             "Energy (USD/TB/year)", min_value=0.0,
@@ -2362,14 +2373,14 @@ with st.container(key="cost-panel"):
         )
         st.caption("Annual price declines")
         tape_media_decline = st.number_input(
-            "Tape media decline (%)", min_value=0.0, max_value=99.99,
+            "Tape cartridge decline (%)", min_value=0.0, max_value=99.99,
             key="tape_media_decline",
-            help="Annual reduction applied to tape media purchase prices.",
+            help="Annual reduction applied to tape cartridge/media purchase prices.",
         )
         tape_hardware_decline = st.number_input(
-            "Tape hardware decline (%)", min_value=0.0, max_value=99.99,
+            "Tape library/drives decline (%)", min_value=0.0, max_value=99.99,
             key="tape_hardware_decline",
-            help="Annual reduction applied to amortized tape hardware costs.",
+            help="Annual reduction applied to amortized tape library, drive, and robotics costs.",
         )
         tape_energy_decline = st.number_input(
             "Tape energy decline (%)", min_value=0.0, max_value=99.99,
@@ -2813,3 +2824,5 @@ with about_tab:
         st.write(
             "Use the linked paper as the source reference for the model framing and baseline assumptions."
         )
+        st.subheader("Contact")
+        st.markdown("[alex@el-shaikh.com](mailto:alex@el-shaikh.com)")

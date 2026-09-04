@@ -34,6 +34,9 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertTrue(
             any("Paper / About" in (markdown.value or "") for markdown in app.markdown)
         )
+        self.assertTrue(
+            any("mailto:alex@el-shaikh.com" in (markdown.value or "") for markdown in app.markdown)
+        )
         self.assertEqual(len(app.metric), 4)
         self.assertEqual(len(app.get("plotly_chart")), 5)
         download_buttons = app.get("download_button")
@@ -121,6 +124,25 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertEqual(app.number_input(key="amazon_put_per_1000").value, 0.05)
         self.assertEqual(app.number_input(key="azure_storage_per_tb_month").value, 1.953125)
         self.assertEqual(app.number_input(key="tape_media_per_tb").value, 6.39)
+        self.assertEqual(
+            app.number_input(key="tape_media_per_tb").label,
+            "Tape cartridges (USD/TB per write)",
+        )
+        self.assertEqual(
+            app.number_input(key="tape_hardware_per_tb").label,
+            "Tape library/drives (USD/TB amortized)",
+        )
+        self.assertEqual(
+            app.number_input(key="tape_media_decline").label,
+            "Tape cartridge decline (%)",
+        )
+        self.assertEqual(
+            app.number_input(key="tape_hardware_decline").label,
+            "Tape library/drives decline (%)",
+        )
+        self.assertTrue(
+            any("avoid double counting" in (caption.value or "") for caption in app.caption)
+        )
 
     def test_model_reset_button_restores_model_inputs_only(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
