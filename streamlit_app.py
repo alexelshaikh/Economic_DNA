@@ -5,6 +5,11 @@ import html
 import pandas as pd
 import streamlit as st
 
+# Form context for the main-area widgets (see the comment before the cost
+# rail): pinned to streamlit==1.63.0, whose form internals these touch.
+from streamlit.delta_generator_singletons import get_dg_singleton_instance
+from streamlit.elements.lib.form_utils import FormData as _FormData
+
 from economic_dna import (
     Scenario,
     find_crossover_years,
@@ -149,7 +154,7 @@ st.markdown(
     html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] input[data-testid="stNumberInputField"],
     html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stSelectbox"] input,
     html:has(.theme-marker.theme-dark) .st-key-cost-panel input[data-testid="stNumberInputField"],
-    html:has(.theme-marker.theme-dark) .st-key-cost-panel input[data-testid="stTextInput"] {
+    html:has(.theme-marker.theme-dark) .st-key-cost-panel input[data-testid="stTextInputField"] {
         color: var(--ink) !important;
         -webkit-text-fill-color: var(--ink) !important;
     }
@@ -188,8 +193,9 @@ st.markdown(
     }
     [data-testid="stHeader"] {
         background: var(--header-bg);
-        -webkit-backdrop-filter: blur(10px);
-        backdrop-filter: blur(10px);
+        /* No backdrop-filter: at 0.96-alpha the blur is imperceptible, and the
+           filter makes Chromium re-rasterize fixed elements layered above the
+           header (the Calculate button) on every rerun — a visible flicker. */
         border-bottom: 1px solid var(--line);
         transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
     }
@@ -294,16 +300,28 @@ st.markdown(
     }
     section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"],
     section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input),
-    .st-key-cost-panel [data-testid="stNumberInputContainer"],
-    .st-key-cost-panel [data-testid="stTextInput"] {
+    .st-key-cost-panel [data-testid="stNumberInputContainer"] {
         background: var(--surface);
         border-color: var(--line-strong);
         border-radius: 6px;
     }
+    /* Text inputs render borderless in 1.63 — the visible border goes on the
+       INNER root element so it contains only the text box, not the label
+       (both themes via the vars). */
+    .st-key-cost-panel [data-testid="stTextInputRootElement"] {
+        background: var(--surface);
+        border: 1px solid var(--line-strong);
+        border-radius: 6px;
+    }
     section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"]:focus-within,
     section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input):focus-within,
-    .st-key-cost-panel [data-testid="stNumberInputContainer"]:focus-within,
-    .st-key-cost-panel [data-testid="stTextInput"]:focus-within {
+    .st-key-cost-panel [data-testid="stNumberInputContainer"]:focus-within {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 1px var(--accent);
+    }
+    /* The focus ring goes on the text BOX, not the wrapper (which also
+       contains the label — a ring there would outline "Display name" too). */
+    .st-key-cost-panel [data-testid="stTextInputRootElement"]:focus-within {
         border-color: var(--accent);
         box-shadow: 0 0 0 1px var(--accent);
     }
@@ -389,10 +407,12 @@ st.markdown(
         inset: 0;
     }
     @keyframes pending-pulse {
-        0%, 100% { box-shadow: var(--shadow-md), 0 0 0 0 var(--accent-glow); }
-        55% { box-shadow: var(--shadow-md), 0 0 0 6px transparent; }
+        0%, 100% { box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.22),
+            0 0 0 0 var(--accent-glow); }
+        55% { box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.22),
+            0 0 0 6px transparent; }
     }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button {
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button {
         align-items: center;
         background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
         border-color: var(--action-bg);
@@ -407,23 +427,26 @@ st.markdown(
         position: absolute;
         transition: filter 140ms ease, transform 90ms ease, box-shadow 140ms ease;
     }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button:hover {
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button:hover {
         filter: brightness(1.09);
         transform: translateY(-1px);
         box-shadow: var(--shadow-lg);
     }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button:active {
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button:active {
         filter: brightness(0.94);
         transform: translateY(1px) scale(0.992);
         box-shadow: var(--shadow-sm);
-    }
-    .st-key-scenario-action-rail:has(.pending-marker) .stButton button {
-        animation: pending-pulse 1.9s var(--ease) infinite;
     }
     .pending-marker { display: none; }
     [data-testid="stMarkdownContainer"]:has(.theme-marker) { display: none; }
     .st-key-theme_auto_dark,
     [data-testid="stElementContainer"]:has(.st-key-theme_auto_dark) {
+        display: none;
+    }
+    /* The 1x1 utility iframes (theme sync, click-away) would otherwise render
+       as tiny bordered dashes in the main flow. Hidden, but their scripts
+       still load and run. */
+    [data-testid="stIFrame"] {
         display: none;
     }
     section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"],
@@ -444,9 +467,9 @@ st.markdown(
         pointer-events: none;
     }
     section[data-testid="stSidebar"] .st-key-scenario-action-rail
-    .stButton button::before,
+    [data-testid="stFormSubmitButton"] button::before,
     section[data-testid="stSidebar"] .st-key-scenario-action-rail
-    .stButton button::after {
+    [data-testid="stFormSubmitButton"] button::after {
         content: "\\2192";
         display: block;
         flex: 0 0 auto;
@@ -454,7 +477,7 @@ st.markdown(
         font-size: 1.55rem;
         line-height: 1;
     }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button p {
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button p {
         font-size: 1.3rem;
         font-weight: 700;
         line-height: 1.2;
@@ -475,59 +498,97 @@ st.markdown(
         display: none;
     }
     /* Header Calculate: pinned to the top bar, centered in the space between
-       the left controls and the theme toggle / status widget on the right.
-       It pulses while changes are pending. */
-    .st-key-calculate-anchor .stButton button {
+       the left controls and the theme toggle / status widget on the right,
+       with downward arrows flanking the label. It pulses while changes are
+       pending. */
+    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button {
         background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
         border: none;
-        border-radius: 10px;
-        box-shadow: var(--shadow-md);
+        border-radius: 12px;
+        box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.22);
         color: var(--action-text);
         font-size: 1.05rem;
         font-weight: 700;
+        gap: 0.55rem;
         left: 50%;
-        letter-spacing: 0.02em;
-        min-height: 2.5rem;
+        letter-spacing: 0.03em;
+        min-height: 2.6rem;
         position: fixed;
         top: 0.7rem;
-        transform: translateX(-50%);
-        width: min(36rem, calc(100vw - 24rem)) !important;
+        transform: translateX(-50%) translateZ(0);
+        width: min(44rem, calc(100vw - 26rem)) !important;
         z-index: 999990;
+        /* Own compositing layer: reruns repaint the content below, and a
+           promoted layer keeps the button from blinking along with it. */
+        will-change: transform;
     }
-    .st-key-calculate-anchor .stButton button:hover {
+    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button::before,
+    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button::after {
+        content: "↓";
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button:hover {
+        box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.22);
         filter: brightness(1.07);
+        transform: translateX(-50%) translateZ(0) translateY(-1px);
     }
-    .st-key-calculate-anchor .stButton button:active {
-        transform: translateX(-50%) translateY(1px) scale(0.99);
+    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button:active {
+        transform: translateX(-50%) translateZ(0) translateY(1px) scale(0.99);
     }
-    .st-key-calculate-anchor:has(.pending-marker) .stButton button {
-        animation: pending-pulse 1.9s var(--ease) infinite;
+    /* During a rerun Streamlit disables buttons; keep the header button
+       visually identical so the disabled state never reads as a blink. */
+    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button[disabled],
+    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button:disabled {
+        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%) !important;
+        color: var(--action-text) !important;
+        opacity: 1 !important;
     }
-    html:has(.theme-marker.theme-dark) .st-key-calculate-anchor .stButton button {
+    html:has(.theme-marker.theme-dark) .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button {
         background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
         color: var(--action-text);
+    }
+    /* Radio tab text: the option's inner text div is compiled from the light
+       theme (dark ink) and ignores the label color — inherit it instead. */
+    html:has(.theme-marker.theme-dark) .st-key-cost-rail [role="radiogroup"] label div {
+        color: inherit !important;
+    }
+    /* The custom-name text input can paint a light-theme (or autofill) white
+       box inside the dark panel — force the dark surface on the input itself,
+       including Chrome's autofill overlay. */
+    html:has(.theme-marker.theme-dark) .st-key-cost-panel [data-testid="stTextInput"] input {
+        background: var(--surface) !important;
+        -webkit-box-shadow: inset 0 0 0 1000px var(--surface) !important;
+    }
+    html:has(.theme-marker.theme-dark) .st-key-cost-panel [data-testid="stTextInput"] input:-webkit-autofill {
+        -webkit-box-shadow: inset 0 0 0 1000px var(--surface) !important;
+        -webkit-text-fill-color: var(--ink) !important;
     }
     /* The panel's Calculate bar (phones only — the header button covers
        desktop) sits sticky at the bottom of the scrolling panel sheet. */
     .st-key-calculate_panel {
         display: none;
     }
-    html:has(.theme-marker.theme-dark) .st-key-calculate_panel button {
+    html:has(.theme-marker.theme-dark) .st-key-calculate_panel [data-testid="stFormSubmitButton"] button {
         background: var(--action-bg);
         border-color: var(--action-bg);
         color: var(--action-text);
     }
 
-    /* Cost-assumption rail: slim vertical model tabs pinned to the right
-       edge of the page; the panel opens beside the rail. Each handle carries
-       the model name (not just an arrow) so the tabs read as what they are.
-       On phones the rail becomes a bottom tab strip and the panel a bottom
-       sheet (see the 640px media query). The panel's widgets stay mounted
-       even when hidden (CSS display:none, not unmounted), so edits survive
-       closing and reopening. */
+    /* Cost-assumption rail: folded tab edges pinned flush to the right side
+       of the page — each handle reads as the folded edge of a tab that "is
+       always there". Opening one unfolds the panel out from under the tabs,
+       sliding right-to-left, and the active tab flattens against the panel so
+       the two read as one connected sheet. Each handle carries the model name
+       (not just an arrow) so the tabs read as what they are. On phones the
+       rail becomes a bottom tab strip and the panel a bottom sheet (see the
+       640px media query). The panel's widgets stay mounted even when hidden
+       (CSS display:none, not unmounted), so edits survive closing and
+       reopening. */
     .st-key-cost-rail {
         position: fixed;
-        right: 0.9rem;
+        right: 0;
         top: 4.6rem;
         z-index: 999900;
         width: 3.9rem;
@@ -538,100 +599,124 @@ st.markdown(
     .st-key-cost-rail [data-testid="stElementContainer"] {
         width: 3.9rem;
     }
-    .st-key-cost-rail .stButton button {
+    .st-key-cost-rail [role="radiogroup"] {
+        flex-direction: column;
+        gap: 0.55rem !important;
+    }
+    .st-key-cost-rail [role="radiogroup"] label {
         align-items: center;
         background: var(--surface);
-        border-color: var(--line);
-        border-radius: 999px;
-        box-shadow: var(--shadow-sm);
+        border: 1px solid var(--line);
+        border-radius: 14px 0 0 14px;
+        border-right: 0;
+        box-shadow: -4px 1px 10px rgba(24, 33, 31, 0.1);
         color: var(--muted);
+        cursor: pointer;
         display: flex;
         font-size: 0.78rem;
         font-weight: 700;
         justify-content: center;
         letter-spacing: 0.06em;
-        min-height: 0;
+        margin: 0 !important;
         padding: 1rem 0.15rem;
         text-transform: uppercase;
         transform: rotate(180deg);
         transition: border-color 120ms ease, background-color 120ms ease,
             color 120ms ease, transform 90ms ease, box-shadow 120ms ease;
+        user-select: none;
         white-space: nowrap;
-        width: 3.9rem !important;
+        width: 3.9rem;
         writing-mode: vertical-rl;
+    }
+    /* The ✕ option is the radio's "closed" state and must remain in the group,
+       but it is completely invisible: the panel closes by clicking the open
+       tab again or clicking away, so no visible close button is needed. The
+       synthesized closeLabel.click() in the click-away script still works on
+       a display:none label. */
+    .st-key-cost-rail [role="radiogroup"] label:has(input[value="0"]) {
+        display: none;
+    }
+    .st-key-cost-rail [role="radiogroup"] label:has(input:focus-visible) {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
     }
     /* Direction arrow on each tab: in the rotated vertical writing mode the
        right-pointing glyph renders pointing left, toward the panel. On phones
        (horizontal strip) it is swapped for an up arrow — see the 640px query. */
-    .st-key-cost-rail .stButton button::after {
+    .st-key-cost-rail [role="radiogroup"] label::after {
         content: "→";
         font-size: 0.9rem;
         line-height: 1;
         margin-top: 0.4rem;
     }
-    .st-key-cost-rail .stButton button:hover {
+    .st-key-cost-rail [role="radiogroup"] label:hover {
         border-color: var(--accent);
         color: var(--accent-strong);
     }
-    .st-key-cost-rail .stButton button:active {
+    .st-key-cost-rail [role="radiogroup"] label:active {
         transform: rotate(180deg) translateY(1px) scale(0.985);
     }
-    .st-key-cost-rail .stButton button[kind="primary"] {
-        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
-        border-color: var(--action-bg);
-        color: var(--action-text);
+    /* The open tab flattens against the panel: same surface, no left corner,
+       accent ink and an accent bar mark the active model. */
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) label:has(input[value="1"]),
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) label:has(input[value="2"]),
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) label:has(input[value="3"]),
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) label:has(input[value="4"]),
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) label:has(input[value="5"]) {
+        background: var(--surface);
+        border-color: var(--line);
+        border-left: 3px solid var(--accent);
+        color: var(--accent-strong);
+        box-shadow: none;
     }
     .st-key-cost-panel {
-        animation: panel-in 0.22s var(--ease);
+        animation: panel-in 0.32s var(--ease);
         background: var(--surface);
         border: 1px solid var(--line);
         border-radius: 14px;
         box-shadow: var(--shadow-lg);
+        /* Hidden by default: during initial hydration the radio has no
+           selection yet, and the :checked-based hide rule cannot match —
+           a default-visible panel flashes for those first frames. */
+        display: none;
         max-height: calc(100vh - 7rem);
         overflow-y: auto;
         padding: 1.1rem 1.15rem 1.2rem;
         position: fixed;
-        right: 5.3rem;
+        right: 3.9rem;
         top: 4.6rem;
-        width: min(24rem, calc(100vw - 6.6rem));
+        width: min(24rem, calc(100vw - 5.2rem));
         z-index: 999900;
     }
+    /* The panel unfolds from under the tabs: it starts off-screen to the
+       right (where the folded tabs "live") and slides out leftward. */
     @keyframes panel-in {
-        from { opacity: 0; transform: translateX(10px); }
+        from { opacity: 0; transform: translateX(calc(100% + 2rem)); }
+        60% { opacity: 1; }
         to { opacity: 1; transform: none; }
     }
-    .st-key-cost-panel:has(.cost-open-none) { display: none; }
+    body:has(.st-key-cost_model_radio input[value="0"]:checked) .st-key-cost-panel { display: none; }
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel,
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel,
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel,
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel,
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel { display: flex; }
     .st-key-cost-panel [class*="st-key-cost_model_"] { display: none; }
-    .st-key-cost-panel:has(.cost-open-dna) .st-key-cost_model_dna { display: block; }
-    .st-key-cost-panel:has(.cost-open-amazon) .st-key-cost_model_amazon { display: block; }
-    .st-key-cost-panel:has(.cost-open-azure) .st-key-cost_model_azure { display: block; }
-    .st-key-cost-panel:has(.cost-open-tape) .st-key-cost_model_tape { display: block; }
-    .st-key-cost-panel:has(.cost-open-custom) .st-key-cost_model_custom { display: block; }
-    .st-key-cost-panel .st-key-close_cost_panel {
-        height: 2rem;
-        position: absolute;
-        right: 0.85rem;
-        top: 0.85rem;
-        width: 2rem;
-        z-index: 2;
-    }
-    .st-key-cost-panel .st-key-close_cost_panel button {
-        background: transparent;
-        border-color: transparent;
-        border-radius: 999px;
-        color: var(--muted);
-        flex: 0 0 auto;
-        height: 2rem !important;
-        min-height: 2rem;
-        min-width: 2rem;
-        padding: 0;
-        width: 2rem !important;
-    }
-    .st-key-cost-panel .st-key-close_cost_panel button:hover {
-        background: var(--surface-subtle);
-        border-color: var(--line);
-        color: var(--ink);
-    }
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost_model_dna { display: block; }
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost_model_amazon { display: block; }
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost_model_azure { display: block; }
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost_model_tape { display: block; }
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost_model_custom { display: block; }
+    /* The panel title follows the checked tab; the default title shows when
+       the panel is closed. */
+    .st-key-cost-panel .cost-panel-title { display: none; }
+    body:has(.st-key-cost_model_radio input[value="0"]:checked) .st-key-cost-panel .cost-title-none { display: block; }
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel .cost-title-dna { display: block; }
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel .cost-title-amazon { display: block; }
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel .cost-title-azure { display: block; }
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel .cost-title-tape { display: block; }
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel .cost-title-custom { display: block; }
+
     .st-key-cost-panel .cost-panel-title {
         color: var(--ink);
         font-size: 1.15rem;
@@ -699,16 +784,6 @@ st.markdown(
         from { opacity: 0; transform: translateX(-5px); }
         to { opacity: 1; transform: none; }
     }
-    .scenario-pending {
-        animation: chip-in 0.28s var(--ease) both;
-        background: var(--chip-bg);
-        border: 1px solid var(--chip-border);
-        border-radius: 999px;
-        color: var(--chip-text);
-        font-weight: 650;
-        padding: 0.12rem 0.65rem;
-    }
-
     @keyframes fade-up {
         from { opacity: 0; transform: translateY(7px); }
         to { opacity: 1; transform: none; }
@@ -1043,26 +1118,55 @@ st.markdown(
             flex: 1;
             width: auto;
         }
-        .st-key-cost-rail .stButton button {
-            font-size: 0.7rem;
+        .st-key-cost-rail [role="radiogroup"] {
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            gap: 0.3rem !important;
+        }
+        .st-key-cost-rail [role="radiogroup"] label {
+            border-radius: 999px;
+            border-right: 1px solid var(--line);
+            box-shadow: var(--shadow-sm);
+            flex: 1 1 0;
+            font-size: 0.62rem;
             height: 2.6rem;
             min-height: 2.6rem;
-            padding: 0 0.4rem;
+            min-width: 0;
+            padding: 0 0.3rem;
             transform: none;
-            width: 100% !important;
+            width: auto;
             writing-mode: horizontal-tb;
         }
-        .st-key-cost-rail .stButton button::after {
+        .st-key-cost-rail [role="radiogroup"] label:has(input[value="0"]) {
+            flex: 0 0 2.4rem;
+            font-size: 0.85rem;
+            padding: 0 0.5rem;
+        }
+        .st-key-cost-rail [role="radiogroup"] label:has(input[value="0"])::after {
+            content: none;
+            margin-left: 0;
+        }
+        body:has(.st-key-cost_model_radio input[value="1"]:checked) label:has(input[value="1"]),
+        body:has(.st-key-cost_model_radio input[value="2"]:checked) label:has(input[value="2"]),
+        body:has(.st-key-cost_model_radio input[value="3"]:checked) label:has(input[value="3"]),
+        body:has(.st-key-cost_model_radio input[value="4"]:checked) label:has(input[value="4"]),
+        body:has(.st-key-cost_model_radio input[value="5"]:checked) label:has(input[value="5"]) {
+            background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
+            border-color: var(--action-bg);
+            border-left: 1px solid var(--action-bg);
+            color: var(--action-text);
+        }
+        .st-key-cost-rail [role="radiogroup"] label::after {
             content: "↑";
             font-size: 0.75rem;
             margin-left: 0.25rem;
             margin-top: 0;
         }
-        .st-key-cost-rail .stButton button:active {
+        .st-key-cost-rail [role="radiogroup"] label:active {
             transform: translateY(1px) scale(0.985);
         }
         .st-key-cost-panel {
-            bottom: 3.7rem;
+            bottom: 4.6rem;
             left: 0.6rem;
             max-height: 55vh;
             right: 0.6rem;
@@ -1070,9 +1174,46 @@ st.markdown(
             width: auto;
         }
         /* Phones keep the sheet's bottom Calculate bar and hide the header
-           button (the header is too crowded at phone width). */
+           button (the header is too crowded at phone width). The desktop rail
+           layout (an absolute button filling a full-height rail) is reverted
+           to an in-flow compact bar so nothing overflows the viewport. */
         section[data-testid="stSidebar"] .st-key-scenario-action-rail {
             display: block;
+            flex: 0 0 auto !important;
+            height: auto !important;
+            min-height: 0 !important;
+        }
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail
+        [data-testid="stElementContainer"] {
+            position: static;
+            inset: auto;
+        }
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button {
+            align-items: center;
+            flex-direction: row;
+            gap: 0.65rem;
+            inset: auto;
+            justify-content: center;
+            padding: 0.8rem 1rem;
+            position: static;
+            width: 100% !important;
+        }
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail
+        [data-testid="stFormSubmitButton"] button::before,
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail
+        [data-testid="stFormSubmitButton"] button::after {
+            content: "\\2192";
+            display: block;
+            flex: 0 0 auto;
+            font-family: "Segoe UI Symbol", sans-serif;
+            font-size: 1.2rem;
+            line-height: 1;
+        }
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button p {
+            font-size: 1.1rem;
+            white-space: nowrap;
+            writing-mode: horizontal-tb;
+            transform: none;
         }
         .st-key-calculate-anchor {
             display: none;
@@ -1085,7 +1226,7 @@ st.markdown(
             position: sticky;
             z-index: 2;
         }
-        .st-key-calculate_panel button {
+        .st-key-calculate_panel [data-testid="stFormSubmitButton"] button {
             background: var(--action-bg);
             border-color: var(--action-bg);
             border-radius: 10px;
@@ -1093,9 +1234,6 @@ st.markdown(
             font-weight: 700;
             min-height: 2.75rem;
             width: 100% !important;
-        }
-        .st-key-cost-panel:has(.pending-marker) .st-key-calculate_panel button {
-            animation: pending-pulse 1.9s var(--ease) infinite;
         }
         .block-container { padding: 4.25rem 0.75rem 6.5rem; }
         h1 { font-size: 1.8rem; }
@@ -1150,12 +1288,26 @@ _THEME_SYNC_JS = """
   const params = new URLSearchParams(parent.location.search);
   if (params.get("theme")) return;
   if (!parent.matchMedia("(prefers-color-scheme: dark)").matches) return;
+  // Apply the dark classes to the theme marker immediately: the whole CSS
+  // dark palette hangs off html:has(.theme-marker.theme-dark), so flipping
+  // the class re-themes the page in the same frame instead of waiting for
+  // the server rerun (which is what made the tabs flash light for seconds).
+  const tryApply = () => {
+    const marker = parent.document.querySelector(".theme-marker");
+    if (!marker) return false;
+    marker.classList.remove("theme-light");
+    marker.classList.add("theme-dark");
+    return true;
+  };
   const tryClick = () => {
+    // Still click the hidden button so the SERVER also learns the theme and
+    // the rerun re-renders charts and markers in dark consistently.
     const btn = parent.document.querySelector(".st-key-theme_auto_dark button");
     if (!btn) return false;
     btn.click();
     return true;
   };
+  tryApply();
   if (tryClick()) return;
   let tries = 0;
   const timer = setInterval(() => {
@@ -1167,6 +1319,56 @@ _THEME_SYNC_JS = """
 """
 
 st.iframe(_THEME_SYNC_JS, width=1, height=1)
+
+# Click-away close for the cost panel: a one-shot iframe attaches a document
+# listener on the parent page that selects the rail's ✕ radio option whenever
+# a click lands outside the rail and the panel. The flag guards against
+# duplicate listeners (the iframe is re-created on every rerun).
+_COST_CLICK_AWAY_JS = """
+<script>
+(() => {
+  if (parent.document.__costClickAway) return;
+  parent.document.__costClickAway = true;
+  let downInside = false;
+  const inside = (target) => {
+    const rail = parent.document.querySelector(".st-key-cost-rail");
+    const panel = parent.document.querySelector(".st-key-cost-panel");
+    return (rail && rail.contains(target)) || (panel && panel.contains(target));
+  };
+  // A drag that STARTS inside the rail or panel must never close the panel,
+  // even if it is released outside (the click then fires on the common
+  // ancestor, which would look like an outside click).
+  parent.document.addEventListener("pointerdown", (event) => {
+    downInside = inside(event.target);
+  }, true);
+  parent.document.addEventListener("click", (event) => {
+    const closePanel = () => {
+      const closeLabel = parent.document.querySelector(
+        '.st-key-cost-rail label:has(input[value="0"])'
+      );
+      // Deferred: a click synthesized inside another event's capture phase
+      // is swallowed, so close after the original click has fully completed.
+      if (closeLabel) setTimeout(() => closeLabel.click(), 0);
+    };
+    const targetInside = inside(event.target);
+    if (downInside) {
+      // Released outside after pressing inside: keep the panel open.
+      if (!targetInside) return;
+      // Pressed and released on the already-selected model tab: toggle close.
+      const label = event.target.closest(".st-key-cost-rail [role='radiogroup'] label");
+      if (label) {
+        const input = label.querySelector("input");
+        if (input && input.checked && input.value !== "0") closePanel();
+      }
+      return;
+    }
+    if (targetInside) return;
+    closePanel();
+  }, true);
+})();
+</script>
+"""
+st.iframe(_COST_CLICK_AWAY_JS, width=1, height=1)
 
 # On phones the sidebar is a full-screen sheet, so after Calculate the fresh
 # results render hidden behind it. A new iframe (rendered only on the post-
@@ -1210,15 +1412,6 @@ COST_MODELS = [
     ("custom", "Custom"),
 ]
 
-
-def _toggle_cost_model(model_key: str) -> None:
-    st.session_state["open_cost_model"] = (
-        None if st.session_state.get("open_cost_model") == model_key else model_key
-    )
-
-
-def _close_cost_panel() -> None:
-    st.session_state["open_cost_model"] = None
 
 
 WIDGET_KEYS = [
@@ -1365,10 +1558,10 @@ def _widget_state_from_scenario(
 
 
 def _reset_to_paper_baseline() -> None:
-    baseline_state = _widget_state_from_scenario(Scenario())
-    st.session_state.update({key: baseline_state[key] for key in WIDGET_KEYS})
-    st.session_state["committed_widgets"] = {key: st.session_state[key] for key in WIDGET_KEYS}
-    st.session_state["form_generation"] = st.session_state.get("form_generation", 0) + 1
+    # Form widgets cannot have their session state written after instantiation,
+    # so the reset is staged: this handler only marks it and reruns, and the
+    # baseline is applied before the widgets render on the next run.
+    st.session_state["reset_requested"] = True
     remaining = {}
     theme_value = st.query_params.get("theme")
     if theme_value:
@@ -1544,209 +1737,209 @@ def _cached_dna_costs(scenario: Scenario, final_year: int) -> pd.DataFrame:
 initial = _initial_scenario()
 query = _query_mapping()
 initial_widgets = _widget_state_from_scenario(initial, query)
+# A staged reset (see _reset_to_paper_baseline): apply the baseline before any
+# widget instantiates, so the form widgets pick it up as their value.
+if st.session_state.pop("reset_requested", False):
+    baseline_state = _widget_state_from_scenario(Scenario())
+    st.session_state.update({key: baseline_state[key] for key in WIDGET_KEYS})
+    st.session_state["committed_widgets"] = {key: st.session_state[key] for key in WIDGET_KEYS}
+    st.session_state["form_generation"] = st.session_state.get("form_generation", 0) + 1
 for widget_key, default_value in initial_widgets.items():
     st.session_state.setdefault(widget_key, default_value)
-# The graphs only follow the last calculated inputs: the initial load counts
-# as the first calculation, and the Calculate button is the only other way
-# to commit widget changes.
+# The graphs only follow the last calculated inputs: the initial load
+# counts as the first calculation. Every widget lives inside one form, so
+# edits never trigger reruns — the three Calculate buttons are form submits
+# and are the only way to commit changes.
 st.session_state.setdefault("committed_widgets", dict(initial_widgets))
-committed_widgets = st.session_state["committed_widgets"]
-pending = _snapshot_widgets() != committed_widgets
 
+# All inputs live in one form: Streamlit batches form widgets client-side and
+# reruns the script only on a submit, so editing parameters never re-renders
+# the buttons or the charts. The form block lives in the sidebar; the panel
+# and header Calculate join it via the main dg's form data below.
 with st.sidebar:
-    input_column, action_column = st.columns([6, 1], gap="small")
-    with input_column:
-        st.markdown(
-            """
-            <div class="sidebar-kicker">Scenario builder</div>
-            <div class="sidebar-title">Model inputs</div>
-            <p class="sidebar-copy">Archive workload, time horizon, and technology selection. Cost assumptions live in the tabs on the right edge of the page.</p>
-            """,
-            unsafe_allow_html=True,
-        )
-        st.button(
-            "Reset to paper baseline",
-            key="reset_baseline",
-            on_click=_reset_to_paper_baseline,
-            icon=":material/refresh:",
-            width="stretch",
-        )
-        st.markdown('<div class="sidebar-section">Workload and time</div>', unsafe_allow_html=True)
-        col_a, col_b = st.columns([2, 1])
-        with col_a:
-            archive_input = st.number_input(
-                "Archive size",
-                min_value=0.001,
-                key="archive_value",
-                help="Total logical data stored in the collection, before DNA coding, redundancy, or provider replication.",
+    # enter_to_submit=False: Enter in a number input would otherwise submit
+    # via the FIRST form_submit_button — the Reset button — silently wiping
+    # edits. Only an explicit Calculate (or Reset) press commits anything.
+    with st.form("scenario_form", border=False, enter_to_submit=False):
+        input_column, action_column = st.columns([6, 1], gap="small")
+        with input_column:
+            st.markdown(
+                """
+                <div class="sidebar-kicker">Scenario builder</div>
+                <div class="sidebar-title">Model inputs</div>
+                <p class="sidebar-copy">Archive workload, time horizon, and technology selection. Cost assumptions live in the tabs on the right edge of the page.</p>
+                """,
+                unsafe_allow_html=True,
             )
-        with col_b:
-            archive_unit_input = st.selectbox(
-                "Unit", ["TB", "PB", "EB"], key="archive_unit",
-                help="Decimal capacity unit: 1 PB = 1,000 TB and 1 EB = 1,000,000 TB.",
-            )
-
-        col_a, col_b = st.columns([2, 1])
-        with col_a:
-            asset_input = st.number_input(
-                "Average asset size",
-                min_value=0.001,
-                key="asset_value",
-                help="Average data object size. It determines object count.",
-            )
-        with col_b:
-            asset_unit_input = st.selectbox(
-                "Unit ", ["MB", "GB"], key="asset_unit",
-                help="Unit used for the average size of one asset.",
-            )
-
-        time_col_a, time_col_b = st.columns(2)
-        with time_col_a:
-            start_year = st.number_input(
-                "Start year", min_value=2025, max_value=2500,
-                key="start_year_widget", help="Calendar year in which the archive is first written.",
-            )
-        with time_col_b:
-            horizon = st.number_input(
-                "Retention (years)", min_value=1, max_value=10_000,
-                key="horizon",
-                help="Number of charged storage years, including the start year.",
-            )
-
-        finance_col_a, finance_col_b = st.columns(2)
-        with finance_col_a:
-            retrieval = st.number_input(
-                "Annual retrieval (%)", min_value=0.0, max_value=10_000.0,
-                step=0.25, key="retrieval",
-                help="Expected share of the logical archive retrieved each year. 1% means reading 10 TB per year from a 1 PB archive.",
-            )
-        with finance_col_b:
-            discount = st.number_input(
-                "Discount rate (%)", min_value=0.0, max_value=99.0,
-                step=0.25, key="discount",
-                help="Real rate used to discount future payments to the storage start year. Use 0 for undiscounted costs.",
-            )
-
-        st.markdown('<div class="sidebar-section">Display</div>', unsafe_allow_html=True)
-        chart_col_a, chart_col_b = st.columns([1.4, 1])
-        with chart_col_a:
-            projection_end = st.number_input(
-                "Outlook end year", min_value=int(start_year), max_value=2500,
-                key="projection_end",
-                help="Final archive start year included in the start-year outlook chart.",
-            )
-        with chart_col_b:
-            st.markdown('<div class="log-scale-label">Log</div>', unsafe_allow_html=True)
-            log_scale = st.toggle(
-                label="Log scale",
-                label_visibility="collapsed",
-                key="log_scale",
-                help="Recommended when technologies differ by several orders of magnitude.",
-            )
-
-        st.markdown('<div class="sidebar-section">Technologies</div>', unsafe_allow_html=True)
-        with st.container(border=True):
-            tech_col_a, tech_col_b = st.columns(2)
-            with tech_col_a:
-                tech_dna = st.checkbox(
-                    "DNA", key="tech_dna", help="Archival storage using DNA synthesis and sequencing.",
-                )
-                tech_amazon = st.checkbox(
-                    "Amazon S3", key="tech_amazon", help="Amazon S3 Glacier Deep Archive.",
-                )
-                tech_tape = st.checkbox(
-                    "Tape", key="tech_tape", help="On-premise tape storage with periodic media replacement.",
-                )
-            with tech_col_b:
-                tech_azure = st.checkbox(
-                    "Azure Blob", key="tech_azure", help="Microsoft Azure Blob Storage Archive tier.",
-                )
-                tech_custom = st.checkbox(
-                    "Custom", key="tech_custom", help="User-defined storage cost model.",
-                )
-
-        st.markdown('<div class="sidebar-section">Cost assumptions</div>', unsafe_allow_html=True)
-        st.markdown(
-            '<p class="sidebar-copy">Editable unit costs and decline rates for each storage model live in the tabs on the right edge of the page.</p>',
-            unsafe_allow_html=True,
-        )
-    with action_column:
-        with st.container(key="scenario-action-rail"):
-            if pending:
-                st.markdown(
-                    '<span class="pending-marker" aria-hidden="true"></span>',
-                    unsafe_allow_html=True,
-                )
-            # The mobile bottom bar; hidden on desktop, where the wide
-            # centered header button is the primary Calculate.
-            calculate_scenario = st.button(
-                "Calculate",
-                type="primary",
-                key="calculate_scenario",
+            reset_baseline = st.form_submit_button(
+                "Reset to paper baseline",
+                key="reset_baseline",
+                icon=":material/refresh:",
                 width="stretch",
             )
+            st.markdown('<div class="sidebar-section">Workload and time</div>', unsafe_allow_html=True)
+            col_a, col_b = st.columns([2, 1])
+            with col_a:
+                archive_input = st.number_input(
+                    "Archive size",
+                    min_value=0.001,
+                    key="archive_value",
+                    help="Total logical data stored in the collection, before DNA coding, redundancy, or provider replication.",
+                )
+            with col_b:
+                archive_unit_input = st.selectbox(
+                    "Unit", ["TB", "PB", "EB"], key="archive_unit",
+                    help="Decimal capacity unit: 1 PB = 1,000 TB and 1 EB = 1,000,000 TB.",
+                )
+    
+            col_a, col_b = st.columns([2, 1])
+            with col_a:
+                asset_input = st.number_input(
+                    "Average asset size",
+                    min_value=0.001,
+                    key="asset_value",
+                    help="Average data object size. It determines object count.",
+                )
+            with col_b:
+                asset_unit_input = st.selectbox(
+                    "Unit ", ["MB", "GB"], key="asset_unit",
+                    help="Unit used for the average size of one asset.",
+                )
+    
+            time_col_a, time_col_b = st.columns(2)
+            with time_col_a:
+                start_year = st.number_input(
+                    "Start year", min_value=2025, max_value=2500,
+                    key="start_year_widget", help="Calendar year in which the archive is first written.",
+                )
+            with time_col_b:
+                horizon = st.number_input(
+                    "Retention (years)", min_value=1, max_value=10_000,
+                    key="horizon",
+                    help="Number of charged storage years, including the start year.",
+                )
+    
+            finance_col_a, finance_col_b = st.columns(2)
+            with finance_col_a:
+                retrieval = st.number_input(
+                    "Annual retrieval (%)", min_value=0.0, max_value=10_000.0,
+                    step=0.25, key="retrieval",
+                    help="Expected share of the logical archive retrieved each year. 1% means reading 10 TB per year from a 1 PB archive.",
+                )
+            with finance_col_b:
+                discount = st.number_input(
+                    "Discount rate (%)", min_value=0.0, max_value=99.0,
+                    step=0.25, key="discount",
+                    help="Real rate used to discount future payments to the storage start year. Use 0 for undiscounted costs.",
+                )
+    
+            st.markdown('<div class="sidebar-section">Display</div>', unsafe_allow_html=True)
+            chart_col_a, chart_col_b = st.columns([1.4, 1])
+            with chart_col_a:
+                projection_end = st.number_input(
+                    "Outlook end year", min_value=int(start_year), max_value=2500,
+                    key="projection_end",
+                    help="Final archive start year included in the start-year outlook chart.",
+                )
+            with chart_col_b:
+                st.markdown('<div class="log-scale-label">Log</div>', unsafe_allow_html=True)
+                log_scale = st.toggle(
+                    label="Log scale",
+                    label_visibility="collapsed",
+                    key="log_scale",
+                    help="Recommended when technologies differ by several orders of magnitude.",
+                )
+    
+            st.markdown('<div class="sidebar-section">Technologies</div>', unsafe_allow_html=True)
+            with st.container(border=True):
+                tech_col_a, tech_col_b = st.columns(2)
+                with tech_col_a:
+                    tech_dna = st.checkbox(
+                        "DNA", key="tech_dna", help="Archival storage using DNA synthesis and sequencing.",
+                    )
+                    tech_amazon = st.checkbox(
+                        "Amazon S3", key="tech_amazon", help="Amazon S3 Glacier Deep Archive.",
+                    )
+                    tech_tape = st.checkbox(
+                        "Tape", key="tech_tape", help="On-premise tape storage with periodic media replacement.",
+                    )
+                with tech_col_b:
+                    tech_azure = st.checkbox(
+                        "Azure Blob", key="tech_azure", help="Microsoft Azure Blob Storage Archive tier.",
+                    )
+                    tech_custom = st.checkbox(
+                        "Custom", key="tech_custom", help="User-defined storage cost model.",
+                    )
+    
+            st.markdown('<div class="sidebar-section">Cost assumptions</div>', unsafe_allow_html=True)
+            st.markdown(
+                '<p class="sidebar-copy">Editable unit costs and decline rates for each storage model live in the tabs on the right edge of the page.</p>',
+                unsafe_allow_html=True,
+            )
+        with action_column:
+            with st.container(key="scenario-action-rail"):
+                # The mobile bottom bar; hidden on desktop, where the wide
+                # centered header button is the primary Calculate.
+                calculate_scenario = st.form_submit_button(
+                    "Calculate",
+                    type="primary",
+                    key="calculate_scenario",
+                    width="stretch",
+                )
+    
+# The panel and header Calculate join the sidebar's form. st.form cannot
+# wrap both containers (a form is a single block), so the form id is attached
+# to the main dg directly — the same mechanism the form block uses on itself.
+# Widgets added through `st.foo` calls read this dg's form data, so the panel
+# inputs batch with the sidebar's and only a Calculate submit reruns anything.
+_main_dg = get_dg_singleton_instance().main_dg
+_main_dg._form_data = _FormData("scenario_form")
 
 # Cost-assumption rail and panel: slim vertical model tabs on the right
-# edge of the page (a bottom strip on phones); clicking a tab opens the
-# floating panel beside the rail. All five model blocks stay mounted and
-# CSS shows only the active one, so edits survive closing and switching.
-st.session_state.setdefault("open_cost_model", None)
-open_cost_model = st.session_state["open_cost_model"]
-
+# edge of the page (a bottom strip on phones). The tabs are pure-HTML radio
+# labels — opening, closing, and switching never trigger a script rerun, so
+# the buttons and charts stay untouched. All five model blocks stay mounted
+# and CSS shows only the checked one, so edits survive closing and switching.
 # Wide centered Calculate button in the top header: it stays visible while
 # the sidebar or a cost panel is open, so it works after either kind of edit.
 # (Hidden on phones, where the sheet bar and the panel bar cover the flows.)
 with st.container(key="calculate-anchor"):
-    if pending:
-        st.markdown(
-            '<span class="pending-marker" aria-hidden="true"></span>',
-            unsafe_allow_html=True,
-        )
-    calculate_header = st.button(
+    calculate_header = st.form_submit_button(
         "Calculate",
         key="calculate_header",
         type="primary",
         width="stretch",
     )
 
+# The tabs are a Streamlit radio: the frontend manages its checked state
+# instantly (no rerun \u2014 it is a form widget), the radio group enforces
+# exclusivity natively, and the CSS reads the checked input's value to open
+# the matching panel. "\u2715" is the closed state. (Raw HTML radios/details do
+# not work: Streamlit's page scripts suppress native form-control activation.)
+st.session_state.setdefault("cost_model_radio", "\u2715")
+
 with st.container(key="cost-rail"):
-    for model_key, model_label in COST_MODELS:
-        st.button(
-            model_label,
-            key=f"cost_tab_{model_key}",
-            type="primary" if open_cost_model == model_key else "secondary",
-            on_click=_toggle_cost_model,
-            args=(model_key,),
-            width="stretch",
-        )
+    st.radio(
+        "Cost model",
+        options=["\u2715", "DNA", "Amazon", "Azure", "Tape", "Custom"],
+        key="cost_model_radio",
+        horizontal=False,
+        label_visibility="collapsed",
+    )
 
 with st.container(key="cost-panel"):
     st.markdown(
-        f'<div class="cost-open-marker cost-open-{open_cost_model or "none"}" hidden></div>',
-        unsafe_allow_html=True,
-    )
-    st.button(
-        label=None,
-        key="close_cost_panel",
-        icon=":material/close:",
-        on_click=_close_cost_panel,
-        help="Close the cost assumptions panel.",
-    )
-    panel_titles = {
-        "dna": "DNA cost assumptions",
-        "amazon": "Amazon Deep Archive assumptions",
-        "azure": "Azure Blob Archive assumptions",
-        "tape": "Tape on-premise assumptions",
-        "custom": "Custom storage assumptions",
-    }
-    st.markdown(
-        f'<div class="sidebar-kicker">Cost assumptions</div>'
-        f'<div class="cost-panel-title">{panel_titles.get(open_cost_model, "Cost assumptions")}</div>'
+        '<div class="sidebar-kicker">Cost assumptions</div>'
+        '<div class="cost-panel-title cost-title-none">Cost assumptions</div>'
+        '<div class="cost-panel-title cost-title-dna">DNA cost assumptions</div>'
+        '<div class="cost-panel-title cost-title-amazon">Amazon Deep Archive assumptions</div>'
+        '<div class="cost-panel-title cost-title-azure">Azure Blob Archive assumptions</div>'
+        '<div class="cost-panel-title cost-title-tape">Tape on-premise assumptions</div>'
+        '<div class="cost-panel-title cost-title-custom">Custom storage assumptions</div>'
         '<p class="cost-panel-deck">Editable unit costs, decline rates, and replacement cycles for each storage model. Changes apply when you press Calculate.</p>',
         unsafe_allow_html=True,
     )
 
-    st.markdown('<div class="sidebar-section">Cost assumptions</div>', unsafe_allow_html=True)
     with st.container(key="cost_model_dna"):
         dna_cost_base_year = st.number_input(
             "DNA cost base year", min_value=2000, max_value=2500,
@@ -1950,18 +2143,20 @@ with st.container(key="cost-panel"):
     # Phones: the panel carries its own Calculate bar (sticky at the sheet's
     # bottom) so a cost change commits without closing the panel. Hidden on
     # desktop, where the header button covers it.
-    if pending:
-        st.markdown(
-            '<span class="pending-marker" aria-hidden="true"></span>',
-            unsafe_allow_html=True,
-        )
-    calculate_panel = st.button(
+    calculate_panel = st.form_submit_button(
         "Calculate",
         key="calculate_panel",
         type="primary",
         width="stretch",
     )
 
+_main_dg._form_data = None
+
+_main_dg._form_data = None
+
+if reset_baseline:
+    _reset_to_paper_baseline()
+    
 submitted = calculate_header or calculate_scenario or calculate_panel
 
 if submitted:
@@ -2045,14 +2240,14 @@ if submitted:
     st.rerun()
 
 committed_widgets = st.session_state["committed_widgets"]
-pending = _snapshot_widgets() != committed_widgets
 
 # Rendered only on the rerun after Calculate (see _SIDEBAR_CLOSE_JS).
 if st.session_state.pop("close_sidebar_on_mobile", False):
     st.iframe(_SIDEBAR_CLOSE_JS, width=1, height=1)
 
-# All graphs render from the last calculated inputs; live widget edits do not
-# touch them until the Calculate button commits a new snapshot.
+# All graphs render from the last calculated inputs; widget edits live inside
+# the form and do not rerun the script, so the graphs only change when a
+# Calculate submit commits a new snapshot.
 try:
     scenario = _scenario_from_widgets(committed_widgets)
 except ValueError as error:
@@ -2103,10 +2298,6 @@ dna_total = float(dna_rows.iloc[0][value_column]) if not dna_rows.empty else Non
 period_end = scenario.start_year + scenario.horizon_years - 1
 cost_basis = "Present value" if use_present_value else "Undiscounted"
 scale_label = "Log scale" if log_scale else "Linear scale"
-
-pending_chip = (
-    '<span class="scenario-pending">Changes pending — press Calculate</span>' if pending else ""
-)
 st.markdown(
     f"""
     <div class="scenario-bar">
@@ -2115,7 +2306,6 @@ st.markdown(
         <span><strong>{len(scenario.technologies)}</strong> technologies</span>
         <span>{cost_basis}</span>
         <span>{scale_label}</span>
-        {pending_chip}
     </div>
     """,
     unsafe_allow_html=True,
