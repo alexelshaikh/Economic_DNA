@@ -49,23 +49,30 @@ class StreamlitAppTests(unittest.TestCase):
         archive_metric = next(metric for metric in app.metric if metric.label == "Archive")
         self.assertEqual(archive_metric.value, "2 TB")
 
-    def test_reset_to_paper_baseline_updates_form_widgets(self):
+    def test_sidebar_and_global_resets_are_client_side(self):
         baseline = Scenario()
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
-        app.number_input(key="archive_value").set_value(2.0)
-        app.number_input(key="start_year_widget").set_value(2035)
-        app.checkbox(key="tech_tape").uncheck()
-        self._submit_form(app)
-        app.run()
-
-        app.button(key="reset_baseline").click()
-        app.run()
 
         self.assertFalse(app.exception)
-        self.assertEqual(app.number_input(key="archive_value").value, baseline.archive_size_tb)
-        self.assertEqual(app.selectbox(key="archive_unit").value, "TB")
-        self.assertEqual(app.number_input(key="start_year_widget").value, baseline.start_year)
-        self.assertTrue(app.checkbox(key="tech_tape").value)
+        sidebar_reset = next(
+            md
+            for md in app.markdown
+            if 'class="sidebar-reset-btn"' in (md.value or "")
+        )
+        self.assertIn("Reset sidebar values to paper baseline", sidebar_reset.value)
+        self.assertIn(f"&quot;archive_value&quot;: {baseline.archive_size_tb}", sidebar_reset.value)
+        self.assertIn(f"&quot;start_year_widget&quot;: {baseline.start_year}", sidebar_reset.value)
+        self.assertIn("&quot;tech_tape&quot;: true", sidebar_reset.value)
+        self.assertNotIn("&quot;dna_synthesis_cost&quot;", sidebar_reset.value)
+
+        global_reset = next(
+            md
+            for md in app.markdown
+            if 'class="global-reset-btn"' in (md.value or "")
+        )
+        self.assertIn("Reset all inputs to paper baseline", global_reset.value)
+        self.assertIn(f"&quot;archive_value&quot;: {baseline.archive_size_tb}", global_reset.value)
+        self.assertIn("&quot;dna_synthesis_cost&quot;", global_reset.value)
 
     def test_custom_storage_can_be_selected_and_named(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
@@ -88,6 +95,27 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertEqual(app.number_input(key="amazon_put_per_1000").value, 0.05)
         self.assertEqual(app.number_input(key="azure_storage_per_tb_month").value, 1.953125)
         self.assertEqual(app.number_input(key="tape_media_per_tb").value, 6.39)
+
+    def test_model_reset_buttons_carry_baseline_values(self):
+        # The per-model reset is a pure-HTML button whose data-values holds
+        # the paper-baseline JSON — the page JS applies it client-side, so no
+        # form submit or rerun happens when it is clicked.
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self.assertFalse(app.exception)
+        baseline = Scenario()
+        dna_btn = next(
+            md
+            for md in app.markdown
+            if 'class="model-reset-btn" data-model="dna"' in (md.value or "")
+        )
+        self.assertIn(f'"dna_cost_base_year": {baseline.dna_cost_base_year}', dna_btn.value)
+        self.assertIn("dna_synthesis_cost", dna_btn.value)
+        amazon_btn = next(
+            md
+            for md in app.markdown
+            if 'class="model-reset-btn" data-model="amazon"' in (md.value or "")
+        )
+        self.assertIn("amazon_storage_per_tb_month", amazon_btn.value)
 
     def test_cost_tabs_are_a_form_radio(self):
         # The tabs are a Streamlit radio INSIDE the form: the frontend manages

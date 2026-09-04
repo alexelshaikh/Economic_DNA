@@ -125,12 +125,6 @@ class Scenario:
             if not math.isfinite(value) or value < 0:
                 errors.append(f"{name} must be a finite value of at least 0")
 
-        custom_name = self.custom_storage_name.strip()
-        if not custom_name or len(custom_name) > 60:
-            errors.append("custom_storage_name must contain between 1 and 60 characters")
-        reserved_names = {name.lower() for name in DEFAULT_TECHNOLOGIES}
-        if custom_name.lower() in reserved_names:
-            errors.append("custom_storage_name must differ from the built-in technology names")
         if not self.technologies:
             errors.append("at least one technology must be selected")
         unknown = sorted(set(self.technologies) - set(AVAILABLE_TECHNOLOGIES))
@@ -138,6 +132,13 @@ class Scenario:
             errors.append(f"unknown technologies: {', '.join(unknown)}")
         if len(set(self.technologies)) != len(self.technologies):
             errors.append("technologies must not contain duplicates")
+        custom_name = self.custom_storage_name.strip()
+        if "Custom storage" in self.technologies:
+            if not custom_name or len(custom_name) > 60:
+                errors.append("custom_storage_name must contain between 1 and 60 characters")
+            reserved_names = {name.lower() for name in DEFAULT_TECHNOLOGIES}
+            if custom_name.lower() in reserved_names:
+                errors.append("custom_storage_name must differ from the built-in technology names")
         if errors:
             raise ValueError("; ".join(errors))
 

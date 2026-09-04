@@ -30,6 +30,11 @@ class ScenarioTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "below 100"):
             Scenario(amazon_decline_percent=100)
 
+    def test_custom_name_is_required_only_when_custom_storage_is_selected(self):
+        Scenario(custom_storage_name="", technologies=("DNA",))
+        with self.assertRaisesRegex(ValueError, "custom_storage_name"):
+            Scenario(custom_storage_name="", technologies=("Custom storage",))
+
     def test_query_parameter_round_trip(self):
         expected = Scenario(
             archive_size_tb=12.5,

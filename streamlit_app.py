@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import json
 
 import pandas as pd
 import streamlit as st
@@ -730,6 +731,68 @@ st.markdown(
         line-height: 1.5;
         margin: 0 0 0.95rem;
     }
+    /* Reset buttons are plain HTML; page JS applies baseline values client-side,
+       so they do not submit the form or refresh charts. */
+    .sidebar-reset-btn {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        color: var(--muted);
+        cursor: pointer;
+        display: block;
+        font-size: 0.9rem;
+        font-weight: 650;
+        min-height: 2.35rem;
+        padding: 0 1rem;
+        width: 100%;
+    }
+    .sidebar-reset-btn:hover {
+        background: var(--surface-subtle);
+        border-color: var(--accent);
+        color: var(--accent-strong);
+    }
+    .global-reset-btn {
+        background: var(--surface);
+        border: 1px solid var(--line-strong);
+        border-radius: 8px;
+        box-shadow: var(--shadow-sm);
+        color: var(--download-text);
+        cursor: pointer;
+        font-size: 0.88rem;
+        font-weight: 650;
+        left: calc(50% + min(22rem, calc((100vw - 26rem) / 2)) + 0.75rem);
+        min-height: 2.35rem;
+        padding: 0 1rem;
+        position: fixed;
+        top: 0.82rem;
+        white-space: nowrap;
+        z-index: 999990;
+    }
+    .global-reset-btn:hover {
+        background: var(--surface-subtle);
+        border-color: var(--accent);
+        color: var(--accent-strong);
+    }
+    /* Per-model resets sit inside the active cost panel and restore only that
+       model's editable assumptions. */
+    .st-key-cost-panel .model-reset-btn {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+        cursor: pointer;
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 650;
+        margin: 0 0 0.7rem auto;
+        min-height: 2.4rem;
+        padding: 0 1.1rem;
+    }
+    .st-key-cost-panel .model-reset-btn:hover {
+        background: var(--surface-subtle);
+        border-color: var(--accent);
+        color: var(--accent-strong);
+    }
 
     .page-kicker { margin-bottom: 0.35rem; }
     .page-deck {
@@ -1335,6 +1398,57 @@ _COST_CLICK_AWAY_JS = """
     const panel = parent.document.querySelector(".st-key-cost-panel");
     return (rail && rail.contains(target)) || (panel && panel.contains(target));
   };
+  const setValue = Object.getOwnPropertyDescriptor(
+    parent.window.HTMLInputElement.prototype, "value"
+  ).set;
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const fireInputEvents = (input) => {
+    input.dispatchEvent(new parent.window.Event("input", { bubbles: true }));
+    input.dispatchEvent(new parent.window.Event("change", { bubbles: true }));
+  };
+  const setTextLike = (input, value) => {
+    setValue.call(input, String(value));
+    fireInputEvents(input);
+  };
+  const setCheckboxLike = (input, value) => {
+    if (input.checked !== Boolean(value)) input.click();
+  };
+  const setSelectbox = async (block, value) => {
+    const target = String(value);
+    const input = block.querySelector("input");
+    if (input && input.value === target) return;
+    const opener = block.querySelector('[data-baseweb="select"], [role="combobox"]') || input;
+    if (opener) {
+      opener.dispatchEvent(new parent.window.MouseEvent("mousedown", { bubbles: true }));
+      opener.click();
+      await sleep(30);
+      const option = [...parent.document.querySelectorAll('[role="option"]')]
+        .find((node) => node.textContent.trim() === target);
+      if (option) {
+        option.click();
+        return;
+      }
+    }
+    if (input) setTextLike(input, target);
+  };
+  const applyWidgetValues = async (scope, values) => {
+    for (const [key, value] of Object.entries(values)) {
+      const block = scope.querySelector(".st-key-" + key)
+        || parent.document.querySelector(".st-key-" + key);
+      if (!block) continue;
+      const checkbox = block.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        setCheckboxLike(checkbox, value);
+        continue;
+      }
+      if (block.querySelector('[data-baseweb="select"], [role="combobox"]')) {
+        await setSelectbox(block, value);
+        continue;
+      }
+      const input = block.querySelector("input");
+      if (input) setTextLike(input, value);
+    }
+  };
   // A drag that STARTS inside the rail or panel must never close the panel,
   // even if it is released outside (the click then fires on the common
   // ancestor, which would look like an outside click).
@@ -1342,6 +1456,17 @@ _COST_CLICK_AWAY_JS = """
     downInside = inside(event.target);
   }, true);
   parent.document.addEventListener("click", (event) => {
+    // Reset buttons carry baseline JSON and update widgets directly, so
+    // there is no submit, rerun, or chart refresh.
+    const resetBtn = event.target.closest(".model-reset-btn, .sidebar-reset-btn, .global-reset-btn");
+    if (resetBtn) {
+      event.preventDefault();
+      const scope = resetBtn.classList.contains("model-reset-btn")
+        ? resetBtn.closest("[class*='st-key-cost_model_']")
+        : parent.document;
+      if (scope) applyWidgetValues(scope, JSON.parse(resetBtn.dataset.values));
+      return;
+    }
     const closePanel = () => {
       const closeLabel = parent.document.querySelector(
         '.st-key-cost-rail label:has(input[value="0"])'
@@ -1412,6 +1537,52 @@ COST_MODELS = [
     ("custom", "Custom"),
 ]
 
+# Widget keys per cost model, used by the per-model "Reset to defaults"
+# buttons: only the listed keys are restored to the paper baseline.
+MODEL_WIDGET_KEYS = {
+    "dna": [
+        "dna_cost_base_year", "dna_synthesis_cost", "dna_sequencing_cost",
+        "synthesis_decline", "sequencing_decline", "dna_durability",
+    ],
+    "amazon": [
+        "amazon_base_year", "amazon_put_per_1000", "amazon_restore_per_1000",
+        "amazon_retrieval_per_tb", "amazon_storage_per_tb_month", "amazon_decline",
+    ],
+    "azure": [
+        "azure_base_year", "azure_write_per_1000", "azure_read_per_1000",
+        "azure_retrieval_per_tb", "azure_storage_per_tb_month", "azure_decline",
+    ],
+    "tape": [
+        "tape_base_year", "tape_durability", "tape_media_per_tb",
+        "tape_hardware_per_tb", "tape_energy_per_tb_year", "tape_media_decline",
+        "tape_hardware_decline", "tape_energy_decline",
+    ],
+    "custom": [
+        "custom_name", "custom_base_year", "custom_write_tb", "custom_write_asset",
+        "custom_storage_tb_year", "custom_retrieval_tb", "custom_retrieval_asset",
+        "custom_decline", "custom_replacement",
+    ],
+}
+
+
+
+SIDEBAR_WIDGET_KEYS = [
+    "archive_value",
+    "archive_unit",
+    "asset_value",
+    "asset_unit",
+    "retrieval",
+    "start_year_widget",
+    "horizon",
+    "tech_dna",
+    "tech_amazon",
+    "tech_azure",
+    "tech_tape",
+    "tech_custom",
+    "discount",
+    "projection_end",
+    "log_scale",
+]
 
 
 WIDGET_KEYS = [
@@ -1555,19 +1726,6 @@ def _widget_state_from_scenario(
         "projection_end": _default_projection_end(scenario, query),
         "log_scale": query.get("log_scale", "True").lower() == "true",
     }
-
-
-def _reset_to_paper_baseline() -> None:
-    # Form widgets cannot have their session state written after instantiation,
-    # so the reset is staged: this handler only marks it and reruns, and the
-    # baseline is applied before the widgets render on the next run.
-    st.session_state["reset_requested"] = True
-    remaining = {}
-    theme_value = st.query_params.get("theme")
-    if theme_value:
-        remaining["theme"] = theme_value
-    st.query_params.from_dict(remaining)
-    st.rerun()
 
 
 def _snapshot_widgets() -> dict[str, bool | float | int | str]:
@@ -1737,13 +1895,12 @@ def _cached_dna_costs(scenario: Scenario, final_year: int) -> pd.DataFrame:
 initial = _initial_scenario()
 query = _query_mapping()
 initial_widgets = _widget_state_from_scenario(initial, query)
-# A staged reset (see _reset_to_paper_baseline): apply the baseline before any
-# widget instantiates, so the form widgets pick it up as their value.
-if st.session_state.pop("reset_requested", False):
-    baseline_state = _widget_state_from_scenario(Scenario())
-    st.session_state.update({key: baseline_state[key] for key in WIDGET_KEYS})
-    st.session_state["committed_widgets"] = {key: st.session_state[key] for key in WIDGET_KEYS}
-    st.session_state["form_generation"] = st.session_state.get("form_generation", 0) + 1
+baseline_widgets = _widget_state_from_scenario(Scenario())
+sidebar_baseline_values = html.escape(
+    json.dumps({key: baseline_widgets[key] for key in SIDEBAR_WIDGET_KEYS}),
+    quote=True,
+)
+global_baseline_values = html.escape(json.dumps(baseline_widgets), quote=True)
 for widget_key, default_value in initial_widgets.items():
     st.session_state.setdefault(widget_key, default_value)
 # The graphs only follow the last calculated inputs: the initial load
@@ -1757,9 +1914,7 @@ st.session_state.setdefault("committed_widgets", dict(initial_widgets))
 # the buttons or the charts. The form block lives in the sidebar; the panel
 # and header Calculate join it via the main dg's form data below.
 with st.sidebar:
-    # enter_to_submit=False: Enter in a number input would otherwise submit
-    # via the FIRST form_submit_button — the Reset button — silently wiping
-    # edits. Only an explicit Calculate (or Reset) press commits anything.
+    # Only explicit Calculate buttons submit; reset buttons update the form client-side.
     with st.form("scenario_form", border=False, enter_to_submit=False):
         input_column, action_column = st.columns([6, 1], gap="small")
         with input_column:
@@ -1771,11 +1926,10 @@ with st.sidebar:
                 """,
                 unsafe_allow_html=True,
             )
-            reset_baseline = st.form_submit_button(
-                "Reset to paper baseline",
-                key="reset_baseline",
-                icon=":material/refresh:",
-                width="stretch",
+            st.markdown(
+                '<button type="button" class="sidebar-reset-btn" '
+                f"data-values='{sidebar_baseline_values}'>Reset sidebar values to paper baseline</button>",
+                unsafe_allow_html=True,
             )
             st.markdown('<div class="sidebar-section">Workload and time</div>', unsafe_allow_html=True)
             col_a, col_b = st.columns([2, 1])
@@ -1895,6 +2049,10 @@ with st.sidebar:
 _main_dg = get_dg_singleton_instance().main_dg
 _main_dg._form_data = _FormData("scenario_form")
 
+# The HTML reset buttons embed each model's paper-baseline values as JSON;
+# the page JS applies them client-side without any form submission.
+model_baselines = {key: json.dumps({k: _widget_state_from_scenario(Scenario())[k] for k in MODEL_WIDGET_KEYS[key]}) for key, _ in COST_MODELS}
+
 # Cost-assumption rail and panel: slim vertical model tabs on the right
 # edge of the page (a bottom strip on phones). The tabs are pure-HTML radio
 # labels — opening, closing, and switching never trigger a script rerun, so
@@ -1904,6 +2062,11 @@ _main_dg._form_data = _FormData("scenario_form")
 # the sidebar or a cost panel is open, so it works after either kind of edit.
 # (Hidden on phones, where the sheet bar and the panel bar cover the flows.)
 with st.container(key="calculate-anchor"):
+    st.markdown(
+        '<button type="button" class="global-reset-btn" '
+        f"data-values='{global_baseline_values}'>Reset all inputs to paper baseline</button>",
+        unsafe_allow_html=True,
+    )
     calculate_header = st.form_submit_button(
         "Calculate",
         key="calculate_header",
@@ -1941,6 +2104,11 @@ with st.container(key="cost-panel"):
     )
 
     with st.container(key="cost_model_dna"):
+        st.markdown(
+            '<button type="button" class="model-reset-btn" data-model="dna" '
+            f'data-values=\'{model_baselines["dna"]}\'>\u21ba Reset to defaults</button>',
+            unsafe_allow_html=True,
+        )
         dna_cost_base_year = st.number_input(
             "DNA cost base year", min_value=2000, max_value=2500,
             key="dna_cost_base_year",
@@ -1973,6 +2141,11 @@ with st.container(key="cost-panel"):
         )
 
     with st.container(key="cost_model_amazon"):
+        st.markdown(
+            '<button type="button" class="model-reset-btn" data-model="amazon" '
+            f'data-values=\'{model_baselines["amazon"]}\'>\u21ba Reset to defaults</button>',
+            unsafe_allow_html=True,
+        )
         st.caption("Price reference")
         amazon_base_year = st.number_input(
             "Amazon price base year", min_value=2000, max_value=2500,
@@ -2011,6 +2184,11 @@ with st.container(key="cost-panel"):
         )
 
     with st.container(key="cost_model_azure"):
+        st.markdown(
+            '<button type="button" class="model-reset-btn" data-model="azure" '
+            f'data-values=\'{model_baselines["azure"]}\'>\u21ba Reset to defaults</button>',
+            unsafe_allow_html=True,
+        )
         st.caption("Price reference")
         azure_base_year = st.number_input(
             "Azure price base year", min_value=2000, max_value=2500,
@@ -2049,6 +2227,11 @@ with st.container(key="cost-panel"):
         )
 
     with st.container(key="cost_model_tape"):
+        st.markdown(
+            '<button type="button" class="model-reset-btn" data-model="tape" '
+            f'data-values=\'{model_baselines["tape"]}\'>\u21ba Reset to defaults</button>',
+            unsafe_allow_html=True,
+        )
         st.caption("Price reference")
         tape_base_year = st.number_input(
             "Tape price base year", min_value=2000, max_value=2500,
@@ -2097,6 +2280,11 @@ with st.container(key="cost-panel"):
         )
 
     with st.container(key="cost_model_custom"):
+        st.markdown(
+            '<button type="button" class="model-reset-btn" data-model="custom" '
+            f'data-values=\'{model_baselines["custom"]}\'>\u21ba Reset to defaults</button>',
+            unsafe_allow_html=True,
+        )
         custom_name = st.text_input(
             "Display name", key="custom_name",
             help="Name used for the custom technology in charts, tables, and downloads.",
@@ -2152,84 +2340,21 @@ with st.container(key="cost-panel"):
 
 _main_dg._form_data = None
 
-_main_dg._form_data = None
-
-if reset_baseline:
-    _reset_to_paper_baseline()
-    
 submitted = calculate_header or calculate_scenario or calculate_panel
 
 if submitted:
-    technologies = tuple(
-        technology
-        for selected, technology in (
-            (tech_dna, "DNA"),
-            (tech_amazon, "Amazon Deep Archive"),
-            (tech_azure, "Azure Blob Archive"),
-            (tech_tape, "Tape On-premise"),
-            (tech_custom, "Custom storage"),
-        )
-        if selected
-    )
-    archive_multiplier = {"TB": 1, "PB": 1000, "EB": 1_000_000}[archive_unit_input]
-    asset_multiplier = {"MB": 1, "GB": 1000}[asset_unit_input]
     try:
-        candidate = Scenario(
-            archive_size_tb=archive_input * archive_multiplier,
-            average_asset_size_mb=asset_input * asset_multiplier,
-            annual_retrieval_percent=retrieval,
-            start_year=int(start_year),
-            horizon_years=int(horizon),
-            discount_rate_percent=discount,
-            dna_cost_base_year=int(dna_cost_base_year),
-            dna_synthesis_cost_per_mb=dna_synthesis_cost,
-            dna_sequencing_cost_per_mb=dna_sequencing_cost,
-            synthesis_decline_percent=synthesis_decline,
-            sequencing_decline_percent=sequencing_decline,
-            amazon_price_base_year=int(amazon_base_year),
-            amazon_put_usd_per_request=amazon_put_per_1000 / 1_000,
-            amazon_bulk_restore_usd_per_request=amazon_restore_per_1000 / 1_000,
-            amazon_bulk_retrieval_usd_per_mb=amazon_retrieval_per_tb / 1_000_000,
-            amazon_storage_usd_per_mb_month=amazon_storage_per_tb_month / 1_000_000,
-            amazon_decline_percent=amazon_decline,
-            azure_price_base_year=int(azure_base_year),
-            azure_write_usd_per_request=azure_write_per_1000 / 1_000,
-            azure_read_usd_per_request=azure_read_per_1000 / 1_000,
-            azure_retrieval_usd_per_mb=azure_retrieval_per_tb / 1_000_000,
-            azure_storage_usd_per_mb_month=azure_storage_per_tb_month / 1_000_000,
-            azure_decline_percent=azure_decline,
-            tape_price_base_year=int(tape_base_year),
-            tape_media_usd_per_tb=tape_media_per_tb,
-            tape_hardware_usd_per_tb=tape_hardware_per_tb,
-            tape_energy_usd_per_tb_year=tape_energy_per_tb_year,
-            tape_media_decline_percent=tape_media_decline,
-            tape_hardware_decline_percent=tape_hardware_decline,
-            tape_energy_decline_percent=tape_energy_decline,
-            dna_durability_years=int(dna_durability),
-            tape_durability_years=int(tape_durability),
-            custom_storage_name=custom_name,
-            custom_cost_base_year=int(custom_base_year),
-            custom_write_cost_per_tb=custom_write_tb,
-            custom_write_cost_per_asset=custom_write_asset,
-            custom_storage_cost_per_tb_year=custom_storage_tb_year,
-            custom_retrieval_cost_per_tb=custom_retrieval_tb,
-            custom_retrieval_cost_per_asset=custom_retrieval_asset,
-            custom_decline_percent=custom_decline,
-            custom_replacement_years=int(custom_replacement),
-            technologies=technologies,
-        )
-    except ValueError as error:
+        submitted_widgets = _snapshot_widgets()
+        candidate = _scenario_from_widgets(submitted_widgets)
+    except (KeyError, ValueError) as error:
         st.error(str(error))
         st.stop()
-    if not candidate.technologies:
-        st.error("Select at least one storage technology.")
-        st.stop()
-    st.session_state["committed_widgets"] = _snapshot_widgets()
+    st.session_state["committed_widgets"] = submitted_widgets
     params = candidate.to_query_params()
     params.update(
         {
-            "projection_end": str(int(projection_end)),
-            "log_scale": str(log_scale),
+            "projection_end": str(int(submitted_widgets["projection_end"])),
+            "log_scale": str(bool(submitted_widgets["log_scale"])),
             "theme": theme,
         }
     )
