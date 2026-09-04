@@ -29,7 +29,9 @@ from economic_dna.visualization import (
 st.set_page_config(
     page_title="DNA Storage Cost Explorer",
     layout="wide",
-    initial_sidebar_state="expanded",
+    # "auto" keeps the sidebar expanded on desktop and collapsed on phones,
+    # where it renders as a full-screen overlay (see the mobile media query).
+    initial_sidebar_state="auto",
 )
 
 st.markdown(
@@ -120,6 +122,12 @@ st.markdown(
     html:has(.theme-marker.theme-dark) [data-testid="stTooltipIcon"] {
         color: var(--accent) !important;
     }
+    /* The expand-control icon is compiled from the light theme (60% dark ink,
+       ignoring CSS vars) — invisible on the dark "Edit inputs" pill. */
+    html:has(.theme-marker.theme-dark) [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
+        color: var(--ink) !important;
+        -webkit-text-fill-color: var(--ink) !important;
+    }
     html:has(.theme-marker.theme-dark) [data-testid="stTooltipIcon"]:hover {
         color: var(--accent-strong) !important;
     }
@@ -174,6 +182,10 @@ st.markdown(
     html, body {
         font-family: "Aptos", "Segoe UI", Arial, sans-serif;
         letter-spacing: 0;
+        /* Real phones inflate/boost font sizes on pages without this, which
+           blows up fixed-size layouts and clips content. */
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
     }
     .stApp {
         background: var(--canvas);
@@ -700,12 +712,149 @@ st.markdown(
         }
         .block-container { padding: 4.5rem 1rem 3rem; }
         .model-item { border-right: 0; }
+        /* 16px inputs stop iOS Safari auto-zooming into the field on focus
+           (below 16px it zooms; this also covers phones in landscape). */
+        section[data-testid="stSidebar"] input {
+            font-size: 16px !important;
+        }
+        /* Main columns stack whenever the main area is narrow (Streamlit only
+           wraps them on the narrowest screens, which leaves landscape phones
+           and small tablets with squashed multi-column rows), and the metric
+           row re-grids two-per-line. Streamlit's mobile column min-width
+           (calc(100% - 24px)) would keep each metric card full-width, so it
+           is zeroed here; the gap is pinned so the 50% basis arithmetic is
+           deterministic. */
+        [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+        }
+        [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]
+        > [data-testid="stColumn"] {
+            flex: 1 1 100% !important;
+        }
+        [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+            flex-wrap: wrap !important;
+            gap: 0.75rem !important;
+        }
+        [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"])
+        > [data-testid="stColumn"] {
+            flex: 1 1 calc(50% - 0.375rem) !important;
+            min-width: 0 !important;
+            max-width: calc(50% - 0.375rem) !important;
+        }
     }
     @media (max-width: 640px) {
+        /* Phones: the sidebar becomes a full-width overlay sheet. Streamlit's
+           responsive columns wrap the input column and the Calculate rail
+           onto separate rows, which pushes the rail below the non-scrolling
+           sidebar content and leaves Calculate unreachable. Force the rail's
+           row into a column instead: the inputs scroll in the space above,
+           and Calculate becomes a compact horizontal bar at the bottom — a
+           fixed-height flex sibling, the same pattern as the desktop rail.
+           flex: 0 0 auto defeats Streamlit's flex: 1 1 0% (flex-basis 0
+           overrides the height), max-width: none beats its 90vw mobile cap,
+           and 100dvh tracks the mobile URL bar better than 100vh. */
+        section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div {
+            width: 100vw !important;
+        }
+        section[data-testid="stSidebar"] {
+            max-width: none !important;
+        }
+        section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) {
+            flex: 0 0 auto !important;
+            flex-direction: column !important;
+            flex-wrap: nowrap !important;
+            height: calc(100vh - 82px);
+            height: calc(100dvh - 82px);
+            gap: 0.6rem !important;
+        }
+        section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
+        > [data-testid="stColumn"]:first-child {
+            flex: 1 1 auto !important;
+            height: auto !important;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 0 0 1rem;
+        }
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail {
+            flex: 0 0 auto !important;
+            height: auto !important;
+            min-height: 0 !important;
+        }
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail
+        [data-testid="stElementContainer"] {
+            position: static;
+            inset: auto;
+        }
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button {
+            align-items: center;
+            flex-direction: row;
+            gap: 0.65rem;
+            inset: auto;
+            justify-content: center;
+            padding: 0.8rem 1rem;
+            position: static;
+        }
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button p {
+            font-size: 1.1rem;
+            white-space: nowrap;
+            writing-mode: horizontal-tb;
+            transform: none;
+        }
+        /* Streamlit collapses the sidebar with a fixed -300px translate; with
+           this 100vw sheet that leaves a 90px sliver painted over the main
+           content at z-index 999991. Hide the collapsed section outright (the
+           expand control lives in the header, not the sidebar). */
+        section[data-testid="stSidebar"][aria-expanded="false"] {
+            visibility: hidden;
+            transform: translateX(-100vw) !important;
+        }
+        /* Touch devices have no hover: keep the sidebar's close control
+           visible so the sheet can always be dismissed. */
+        section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {
+            visibility: visible;
+        }
+        /* The expand control is a bare 28px icon on the header — too easy to
+           miss on a phone. Give it a labeled pill so the scenario builder is
+           discoverable. */
+        [data-testid="stExpandSidebarButton"] {
+            align-items: center;
+            background: var(--surface);
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            box-shadow: var(--shadow-sm);
+            display: flex;
+            gap: 0.45rem;
+            min-height: 2.5rem;
+            min-width: 2.5rem;
+            padding: 0 0.85rem;
+        }
+        [data-testid="stExpandSidebarButton"]::after {
+            content: "Edit inputs";
+            color: var(--ink);
+            font-size: 0.9rem;
+            font-weight: 650;
+        }
+
+        /* Guards for real devices: no sideways scroll (an overflowing widget
+           makes iOS/Android scroll the page right on focus, clipping the
+           left edge), inputs that can shrink instead of overflowing the
+           sheet, and metric values that wrap instead of clipping. */
+        html, body { overflow-x: hidden; }
+        section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"],
+        section[data-testid="stSidebar"] [data-testid="stSelectbox"],
+        section[data-testid="stSidebar"] input {
+            min-width: 0;
+        }
+        [data-testid="stMetricValue"], [data-testid="stMetricValue"] p {
+            white-space: normal !important;
+            overflow-wrap: anywhere;
+        }
         .block-container { padding: 4.25rem 0.75rem 2.5rem; }
         h1 { font-size: 1.8rem; }
         .page-deck { font-size: 0.92rem; }
-        [data-testid="stMetric"] { min-height: 98px; }
+        [data-testid="stMetric"] { min-height: 96px; padding: 0.8rem 0.75rem; }
+        [data-testid="stMetricValue"] { font-size: 1.18rem; }
+        .contract-card { overflow-x: auto; }
         div[data-testid="stTabs"] div[role="tablist"] { gap: 1.1rem; }
         .scenario-bar { align-items: flex-start; flex-direction: column; gap: 0.25rem; }
     }
@@ -770,6 +919,26 @@ _THEME_SYNC_JS = """
 """
 
 st.iframe(_THEME_SYNC_JS, width=1, height=1)
+
+# On phones the sidebar is a full-screen sheet, so after Calculate the fresh
+# results render hidden behind it. A new iframe (rendered only on the post-
+# submit rerun) marks the sidebar collapsed in Streamlit's localStorage and
+# reloads the page: the reload is a same-document navigation, which the
+# iframe sandbox permits (redirects elsewhere are blocked), and the reloaded
+# app re-runs from the URL params the submit just wrote, so the committed
+# results are what render. Desktop skips this: its sidebar sits beside the
+# content, so the results are already visible.
+_SIDEBAR_CLOSE_JS = """
+<script>
+(() => {
+  if (parent.innerWidth > 640) return;
+  const key = Object.keys(parent.localStorage).find((k) => k.startsWith("stSidebarCollapsed"))
+    || "stSidebarCollapsed-";
+  parent.localStorage.setItem(key, "true");
+  parent.location.reload();
+})();
+</script>
+"""
 
 # Theme toggle, pinned to the page header next to Streamlit's toolbar menu.
 with st.container(key="theme-toggle-anchor"):
@@ -1201,7 +1370,8 @@ with st.sidebar:
         with chart_col_b:
             st.markdown('<div class="log-scale-label">Log</div>', unsafe_allow_html=True)
             log_scale = st.toggle(
-                label=None,
+                label="Log scale",
+                label_visibility="collapsed",
                 key="log_scale",
                 help="Recommended when technologies differ by several orders of magnitude.",
             )
@@ -1517,10 +1687,17 @@ if submitted:
         }
     )
     st.query_params.from_dict(params)
+    # Phones: the next rerun pops this flag and renders the iframe that
+    # closes the sidebar sheet so the committed results are visible.
+    st.session_state["close_sidebar_on_mobile"] = True
     st.rerun()
 
 committed_widgets = st.session_state["committed_widgets"]
 pending = _snapshot_widgets() != committed_widgets
+
+# Rendered only on the rerun after Calculate (see _SIDEBAR_CLOSE_JS).
+if st.session_state.pop("close_sidebar_on_mobile", False):
+    st.iframe(_SIDEBAR_CLOSE_JS, width=1, height=1)
 
 # All graphs render from the last calculated inputs; live widget edits do not
 # touch them until the Calculate button commits a new snapshot.
