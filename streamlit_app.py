@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import html
-import json
-
 import pandas as pd
 import streamlit as st
 
@@ -577,57 +575,60 @@ st.markdown(
         color: var(--action-text);
     }
 
-    /* Cost-assumption rail: folded tab edges pinned flush to the right side
-       of the page — each handle reads as the folded edge of a tab that "is
-       always there". Opening one unfolds the panel out from under the tabs,
-       sliding right-to-left, and the active tab flattens against the panel so
-       the two read as one connected sheet. Each handle carries the model name
-       (not just an arrow) so the tabs read as what they are. On phones the
-       rail becomes a bottom tab strip and the panel a bottom sheet (see the
-       640px media query). The panel's widgets stay mounted even when hidden
-       (CSS display:none, not unmounted), so edits survive closing and
-       reopening. */
+    /* Cost-assumption rail: a compact model switcher pinned to the edge.
+       The panel stays mounted and animates with opacity/transform so both
+       opening and closing feel smooth while form edits stay intact. */
     .st-key-cost-rail {
+        background: color-mix(in srgb, var(--surface) 94%, transparent);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        box-shadow: var(--shadow-md);
+        padding: 0.38rem;
         position: fixed;
-        right: 0;
-        top: 4.6rem;
+        right: 0.75rem;
+        top: 5.05rem;
         z-index: 999900;
-        width: 3.9rem;
+        width: 8.5rem;
     }
     .st-key-cost-rail [data-testid="stVerticalBlock"] {
-        gap: 0.55rem !important;
+        gap: 0.28rem !important;
     }
     .st-key-cost-rail [data-testid="stElementContainer"] {
-        width: 3.9rem;
+        width: 100% !important;
     }
     .st-key-cost-rail [role="radiogroup"] {
         flex-direction: column;
-        gap: 0.55rem !important;
+        gap: 0.28rem !important;
+        width: 100%;
     }
     .st-key-cost-rail [role="radiogroup"] label {
         align-items: center;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 14px 0 0 14px;
-        border-right: 0;
-        box-shadow: -4px 1px 10px rgba(24, 33, 31, 0.1);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 11px;
+        box-shadow: none;
         color: var(--muted);
         cursor: pointer;
         display: flex;
-        font-size: 0.78rem;
+        box-sizing: border-box;
+        font-size: 0.7rem;
         font-weight: 700;
-        justify-content: center;
-        letter-spacing: 0.06em;
+        gap: 0.4rem;
+        justify-content: flex-start;
+        letter-spacing: 0;
         margin: 0 !important;
-        padding: 1rem 0.15rem;
-        text-transform: uppercase;
-        transform: rotate(180deg);
-        transition: border-color 120ms ease, background-color 120ms ease,
-            color 120ms ease, transform 90ms ease, box-shadow 120ms ease;
+        min-height: 2.7rem;
+        overflow: hidden;
+        padding: 0.28rem 0.36rem;
+        position: relative;
+        text-transform: none;
+        transform: none;
+        transition: border-color 160ms var(--ease), background-color 160ms var(--ease),
+            color 160ms var(--ease), transform 120ms var(--ease), box-shadow 160ms var(--ease);
         user-select: none;
         white-space: nowrap;
-        width: 3.9rem;
-        writing-mode: vertical-rl;
+        width: 100%;
+        writing-mode: horizontal-tb;
     }
     /* The ✕ option is the radio's "closed" state and must remain in the group,
        but it is completely invisible: the panel closes by clicking the open
@@ -641,73 +642,135 @@ st.markdown(
         outline: 2px solid var(--accent);
         outline-offset: 2px;
     }
-    /* Direction arrow on each tab: in the rotated vertical writing mode the
-       right-pointing glyph renders pointing left, toward the panel. On phones
-       (horizontal strip) it is swapped for an up arrow — see the 640px query. */
-    .st-key-cost-rail [role="radiogroup"] label::after {
-        content: "→";
-        font-size: 0.9rem;
+    /* Compact badges make each storage model scannable without relying only
+       on the text label. */
+    .st-key-cost-rail [role="radiogroup"] label::before {
+        align-items: center;
+        background: var(--surface-subtle);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--ink-soft);
+        content: "";
+        display: flex;
+        flex: 0 0 1.45rem;
+        font-size: 0.64rem;
+        font-weight: 800;
+        height: 1.45rem;
+        justify-content: center;
         line-height: 1;
-        margin-top: 0.4rem;
+        transition: background-color 160ms var(--ease), border-color 160ms var(--ease),
+            color 160ms var(--ease), transform 160ms var(--ease);
+        width: 1.45rem;
+    }
+    .st-key-cost-rail [role="radiogroup"] label:has(input[value="1"])::before { content: "DNA"; }
+    .st-key-cost-rail [role="radiogroup"] label:has(input[value="2"])::before { content: "S3"; }
+    .st-key-cost-rail [role="radiogroup"] label:has(input[value="3"])::before { content: "AZ"; }
+    .st-key-cost-rail [role="radiogroup"] label:has(input[value="4"])::before { content: "LTO"; }
+    .st-key-cost-rail [role="radiogroup"] label:has(input[value="5"])::before { content: "+"; }
+    .st-key-cost-rail [role="radiogroup"] label::after {
+        background: var(--accent);
+        border-radius: 999px;
+        content: "";
+        height: 0.36rem;
+        margin-left: auto;
+        opacity: 0;
+        transform: scale(0.4);
+        transition: opacity 160ms var(--ease), transform 160ms var(--ease);
+        width: 0.36rem;
     }
     .st-key-cost-rail [role="radiogroup"] label:hover {
+        background: var(--surface-subtle);
         border-color: var(--accent);
         color: var(--accent-strong);
+        transform: translateX(-2px);
     }
     .st-key-cost-rail [role="radiogroup"] label:active {
-        transform: rotate(180deg) translateY(1px) scale(0.985);
+        transform: translateX(-1px) scale(0.985);
     }
     /* The open tab flattens against the panel: same surface, no left corner,
        accent ink and an accent bar mark the active model. */
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) label:has(input[value="1"]),
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) label:has(input[value="2"]),
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) label:has(input[value="3"]),
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) label:has(input[value="4"]),
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) label:has(input[value="5"]) {
-        background: var(--surface);
-        border-color: var(--line);
-        border-left: 3px solid var(--accent);
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-rail label:has(input[value="1"]),
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-rail label:has(input[value="2"]),
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-rail label:has(input[value="3"]),
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-rail label:has(input[value="4"]),
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-rail label:has(input[value="5"]) {
+        background: var(--accent-soft);
+        border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
         color: var(--accent-strong);
-        box-shadow: none;
+        box-shadow: inset 3px 0 0 var(--accent);
+        transform: translateX(-3px);
+    }
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-rail label:has(input[value="1"])::before,
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-rail label:has(input[value="2"])::before,
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-rail label:has(input[value="3"])::before,
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-rail label:has(input[value="4"])::before,
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-rail label:has(input[value="5"])::before {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #ffffff;
+        transform: scale(1.04);
+    }
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-rail label:has(input[value="1"])::after,
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-rail label:has(input[value="2"])::after,
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-rail label:has(input[value="3"])::after,
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-rail label:has(input[value="4"])::after,
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-rail label:has(input[value="5"])::after {
+        opacity: 1;
+        transform: scale(1);
     }
     .st-key-cost-panel {
-        animation: panel-in 0.32s var(--ease);
         background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 14px;
+        border-radius: 16px;
         box-shadow: var(--shadow-lg);
         /* Hidden by default: during initial hydration the radio has no
            selection yet, and the :checked-based hide rule cannot match —
            a default-visible panel flashes for those first frames. */
-        display: none;
+        display: flex;
+        flex-direction: column;
         max-height: calc(100vh - 7rem);
+        opacity: 0;
         overflow-y: auto;
+        pointer-events: none;
         padding: 1.1rem 1.15rem 1.2rem;
         position: fixed;
-        right: 3.9rem;
-        top: 4.6rem;
-        width: min(24rem, calc(100vw - 5.2rem));
+        right: 9.85rem;
+        top: 5.05rem;
+        transform: translateX(1.2rem) scale(0.985);
+        transition: opacity 220ms var(--ease), transform 260ms var(--ease),
+            visibility 0s linear 260ms, border-color 180ms var(--ease);
+        visibility: hidden;
+        width: min(27rem, calc(100vw - 11.5rem));
         z-index: 999900;
     }
-    /* The panel unfolds from under the tabs: it starts off-screen to the
-       right (where the folded tabs "live") and slides out leftward. */
-    @keyframes panel-in {
-        from { opacity: 0; transform: translateX(calc(100% + 2rem)); }
-        60% { opacity: 1; }
-        to { opacity: 1; transform: none; }
-    }
-    body:has(.st-key-cost_model_radio input[value="0"]:checked) .st-key-cost-panel { display: none; }
     body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel,
     body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel,
     body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel,
     body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel,
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel { display: flex; }
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel {
+        opacity: 1;
+        pointer-events: auto;
+        transform: none;
+        transition-delay: 0s;
+        visibility: visible;
+    }
     .st-key-cost-panel [class*="st-key-cost_model_"] { display: none; }
     body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost_model_dna { display: block; }
     body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost_model_amazon { display: block; }
     body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost_model_azure { display: block; }
     body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost_model_tape { display: block; }
     body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost_model_custom { display: block; }
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost_model_dna,
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost_model_amazon,
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost_model_azure,
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost_model_tape,
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost_model_custom {
+        animation: cost-model-in 210ms var(--ease) both;
+    }
+    @keyframes cost-model-in {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: none; }
+    }
     /* The panel title follows the checked tab; the default title shows when
        the panel is closed. */
     .st-key-cost-panel .cost-panel-title { display: none; }
@@ -720,20 +783,68 @@ st.markdown(
 
     .st-key-cost-panel .cost-panel-title {
         color: var(--ink);
-        font-size: 1.15rem;
+        font-size: 1.2rem;
         font-weight: 720;
         line-height: 1.3;
-        margin: 0.2rem 2.4rem 0.35rem 0;
+        margin: 0.15rem 2.4rem 0.35rem 0;
     }
     .st-key-cost-panel .cost-panel-deck {
         color: var(--muted);
         font-size: 0.84rem;
         line-height: 1.5;
-        margin: 0 0 0.95rem;
+        margin: 0;
     }
-    /* Reset buttons are plain HTML; page JS applies baseline values client-side,
-       so they do not submit the form or refresh charts. */
-    .sidebar-reset-btn {
+    .st-key-cost-panel .cost-panel-header {
+        background: linear-gradient(180deg, var(--surface-subtle), transparent 115%);
+        border-bottom: 1px solid var(--line);
+        margin: -1.1rem -1.15rem 1rem;
+        padding: 1.05rem 1.15rem 0.95rem;
+        position: sticky;
+        top: -1.1rem;
+        z-index: 1;
+    }
+    .st-key-cost-panel .cost-panel-summary {
+        display: none;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.7rem;
+    }
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel .cost-summary-dna,
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel .cost-summary-amazon,
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel .cost-summary-azure,
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel .cost-summary-tape,
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel .cost-summary-custom {
+        display: flex;
+    }
+    .st-key-cost-panel .cost-panel-summary span {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--ink-soft);
+        font-size: 0.72rem;
+        font-weight: 650;
+        line-height: 1.2;
+        padding: 0.28rem 0.5rem;
+    }
+    .st-key-cost-panel [data-testid="stCaptionContainer"] {
+        background: var(--surface-subtle);
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--teal);
+        font-size: 0.72rem;
+        font-weight: 750;
+        line-height: 1.2;
+        margin: 0.75rem 0 0.35rem;
+        padding: 0.34rem 0.5rem;
+        text-transform: uppercase;
+    }
+    .st-key-cost-panel [data-testid="stNumberInput"],
+    .st-key-cost-panel [data-testid="stTextInput"] {
+        margin-bottom: 0.18rem;
+    }
+    /* Reset buttons synchronize Streamlit's widget state without updating the
+       committed scenario or refreshing charts. */
+    .st-key-sidebar-reset-btn .stButton button {
         background: transparent;
         border: 1px solid var(--line);
         border-radius: 8px;
@@ -746,12 +857,12 @@ st.markdown(
         padding: 0 1rem;
         width: 100%;
     }
-    .sidebar-reset-btn:hover {
+    .st-key-sidebar-reset-btn .stButton button:hover {
         background: var(--surface-subtle);
         border-color: var(--accent);
         color: var(--accent-strong);
     }
-    .global-reset-btn {
+    .st-key-global-reset-btn .stButton button {
         background: var(--surface);
         border: 1px solid var(--line-strong);
         border-radius: 8px;
@@ -766,16 +877,21 @@ st.markdown(
         position: fixed;
         top: 0.82rem;
         white-space: nowrap;
+        width: max-content !important;
         z-index: 999990;
     }
-    .global-reset-btn:hover {
+    .st-key-global-reset-btn .stButton button:hover {
         background: var(--surface-subtle);
         border-color: var(--accent);
         color: var(--accent-strong);
     }
     /* Per-model resets sit inside the active cost panel and restore only that
        model's editable assumptions. */
-    .st-key-cost-panel .model-reset-btn {
+    .st-key-cost-panel [class*="st-key-model-reset-"] [data-testid="stFormSubmitButton"] {
+        display: flex;
+        justify-content: flex-end;
+    }
+    .st-key-cost-panel [class*="st-key-model-reset-"] [data-testid="stFormSubmitButton"] button {
         background: transparent;
         border: 1px solid var(--line);
         border-radius: 999px;
@@ -787,8 +903,9 @@ st.markdown(
         margin: 0 0 0.7rem auto;
         min-height: 2.4rem;
         padding: 0 1.1rem;
+        width: auto;
     }
-    .st-key-cost-panel .model-reset-btn:hover {
+    .st-key-cost-panel [class*="st-key-model-reset-"] [data-testid="stFormSubmitButton"] button:hover {
         background: var(--surface-subtle);
         border-color: var(--accent);
         color: var(--accent-strong);
@@ -819,6 +936,12 @@ st.markdown(
         transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
     }
     .model-strip strong { color: var(--ink); font-weight: 700; }
+    .model-strip a {
+        color: var(--accent-strong);
+        font-weight: 700;
+        text-decoration: none;
+    }
+    .model-strip a:hover { text-decoration: underline; }
     .model-item {
         border-right: 1px solid var(--line);
         margin-right: 0.75rem;
@@ -1016,6 +1139,24 @@ st.markdown(
         background: transparent;
     }
 
+    @media (max-width: 1200px) {
+        .st-key-global-reset-btn .stButton button {
+            font-size: 0;
+            left: auto;
+            min-height: 2.35rem;
+            padding: 0;
+            right: calc(50% + min(22rem, calc((100vw - 26rem) / 2)) + 0.75rem);
+            width: 2.35rem !important;
+        }
+        .st-key-global-reset-btn .stButton button::before {
+            content: "\\21ba";
+            display: block;
+            font-family: "Segoe UI Symbol", sans-serif;
+            font-size: 1rem;
+            line-height: 1;
+        }
+    }
+
     @media (max-width: 900px) {
         section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div {
             width: min(460px, 94vw) !important;
@@ -1209,20 +1350,21 @@ st.markdown(
             content: none;
             margin-left: 0;
         }
-        body:has(.st-key-cost_model_radio input[value="1"]:checked) label:has(input[value="1"]),
-        body:has(.st-key-cost_model_radio input[value="2"]:checked) label:has(input[value="2"]),
-        body:has(.st-key-cost_model_radio input[value="3"]:checked) label:has(input[value="3"]),
-        body:has(.st-key-cost_model_radio input[value="4"]:checked) label:has(input[value="4"]),
-        body:has(.st-key-cost_model_radio input[value="5"]:checked) label:has(input[value="5"]) {
+        body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-rail label:has(input[value="1"]),
+        body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-rail label:has(input[value="2"]),
+        body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-rail label:has(input[value="3"]),
+        body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-rail label:has(input[value="4"]),
+        body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-rail label:has(input[value="5"]) {
             background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
             border-color: var(--action-bg);
             border-left: 1px solid var(--action-bg);
             color: var(--action-text);
+            box-shadow: var(--shadow-sm);
+            transform: translateY(-2px);
         }
         .st-key-cost-rail [role="radiogroup"] label::after {
-            content: "↑";
-            font-size: 0.75rem;
-            margin-left: 0.25rem;
+            content: "";
+            margin-left: auto;
             margin-top: 0;
         }
         .st-key-cost-rail [role="radiogroup"] label:active {
@@ -1234,7 +1376,15 @@ st.markdown(
             max-height: 55vh;
             right: 0.6rem;
             top: auto;
+            transform: translateY(1.2rem) scale(0.99);
             width: auto;
+        }
+        body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel,
+        body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel,
+        body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel,
+        body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel,
+        body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel {
+            transform: none;
         }
         /* Phones keep the sheet's bottom Calculate bar and hide the header
            button (the header is too crowded at phone width). The desktop rail
@@ -1279,6 +1429,9 @@ st.markdown(
             transform: none;
         }
         .st-key-calculate-anchor {
+            display: none;
+        }
+        .st-key-global-reset-btn {
             display: none;
         }
         .st-key-calculate_panel {
@@ -1398,57 +1551,6 @@ _COST_CLICK_AWAY_JS = """
     const panel = parent.document.querySelector(".st-key-cost-panel");
     return (rail && rail.contains(target)) || (panel && panel.contains(target));
   };
-  const setValue = Object.getOwnPropertyDescriptor(
-    parent.window.HTMLInputElement.prototype, "value"
-  ).set;
-  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const fireInputEvents = (input) => {
-    input.dispatchEvent(new parent.window.Event("input", { bubbles: true }));
-    input.dispatchEvent(new parent.window.Event("change", { bubbles: true }));
-  };
-  const setTextLike = (input, value) => {
-    setValue.call(input, String(value));
-    fireInputEvents(input);
-  };
-  const setCheckboxLike = (input, value) => {
-    if (input.checked !== Boolean(value)) input.click();
-  };
-  const setSelectbox = async (block, value) => {
-    const target = String(value);
-    const input = block.querySelector("input");
-    if (input && input.value === target) return;
-    const opener = block.querySelector('[data-baseweb="select"], [role="combobox"]') || input;
-    if (opener) {
-      opener.dispatchEvent(new parent.window.MouseEvent("mousedown", { bubbles: true }));
-      opener.click();
-      await sleep(30);
-      const option = [...parent.document.querySelectorAll('[role="option"]')]
-        .find((node) => node.textContent.trim() === target);
-      if (option) {
-        option.click();
-        return;
-      }
-    }
-    if (input) setTextLike(input, target);
-  };
-  const applyWidgetValues = async (scope, values) => {
-    for (const [key, value] of Object.entries(values)) {
-      const block = scope.querySelector(".st-key-" + key)
-        || parent.document.querySelector(".st-key-" + key);
-      if (!block) continue;
-      const checkbox = block.querySelector('input[type="checkbox"]');
-      if (checkbox) {
-        setCheckboxLike(checkbox, value);
-        continue;
-      }
-      if (block.querySelector('[data-baseweb="select"], [role="combobox"]')) {
-        await setSelectbox(block, value);
-        continue;
-      }
-      const input = block.querySelector("input");
-      if (input) setTextLike(input, value);
-    }
-  };
   // A drag that STARTS inside the rail or panel must never close the panel,
   // even if it is released outside (the click then fires on the common
   // ancestor, which would look like an outside click).
@@ -1456,17 +1558,6 @@ _COST_CLICK_AWAY_JS = """
     downInside = inside(event.target);
   }, true);
   parent.document.addEventListener("click", (event) => {
-    // Reset buttons carry baseline JSON and update widgets directly, so
-    // there is no submit, rerun, or chart refresh.
-    const resetBtn = event.target.closest(".model-reset-btn, .sidebar-reset-btn, .global-reset-btn");
-    if (resetBtn) {
-      event.preventDefault();
-      const scope = resetBtn.classList.contains("model-reset-btn")
-        ? resetBtn.closest("[class*='st-key-cost_model_']")
-        : parent.document;
-      if (scope) applyWidgetValues(scope, JSON.parse(resetBtn.dataset.values));
-      return;
-    }
     const closePanel = () => {
       const closeLabel = parent.document.querySelector(
         '.st-key-cost-rail label:has(input[value="0"])'
@@ -1896,11 +1987,13 @@ initial = _initial_scenario()
 query = _query_mapping()
 initial_widgets = _widget_state_from_scenario(initial, query)
 baseline_widgets = _widget_state_from_scenario(Scenario())
-sidebar_baseline_values = html.escape(
-    json.dumps({key: baseline_widgets[key] for key in SIDEBAR_WIDGET_KEYS}),
-    quote=True,
-)
-global_baseline_values = html.escape(json.dumps(baseline_widgets), quote=True)
+
+
+def _reset_widget_keys(widget_keys: list[str]) -> None:
+    for widget_key in widget_keys:
+        st.session_state[widget_key] = baseline_widgets[widget_key]
+
+
 for widget_key, default_value in initial_widgets.items():
     st.session_state.setdefault(widget_key, default_value)
 # The graphs only follow the last calculated inputs: the initial load
@@ -1914,7 +2007,14 @@ st.session_state.setdefault("committed_widgets", dict(initial_widgets))
 # the buttons or the charts. The form block lives in the sidebar; the panel
 # and header Calculate join it via the main dg's form data below.
 with st.sidebar:
-    # Only explicit Calculate buttons submit; reset buttons update the form client-side.
+    with st.container(key="sidebar-reset-btn"):
+        st.button(
+            "Reset sidebar values to paper baseline",
+            key="sidebar_reset",
+            on_click=_reset_widget_keys,
+            args=(SIDEBAR_WIDGET_KEYS,),
+            width="stretch",
+        )
     with st.form("scenario_form", border=False, enter_to_submit=False):
         input_column, action_column = st.columns([6, 1], gap="small")
         with input_column:
@@ -1924,11 +2024,6 @@ with st.sidebar:
                 <div class="sidebar-title">Model inputs</div>
                 <p class="sidebar-copy">Archive workload, time horizon, and technology selection. Cost assumptions live in the tabs on the right edge of the page.</p>
                 """,
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                '<button type="button" class="sidebar-reset-btn" '
-                f"data-values='{sidebar_baseline_values}'>Reset sidebar values to paper baseline</button>",
                 unsafe_allow_html=True,
             )
             st.markdown('<div class="sidebar-section">Workload and time</div>', unsafe_allow_html=True)
@@ -2047,11 +2142,6 @@ with st.sidebar:
 # Widgets added through `st.foo` calls read this dg's form data, so the panel
 # inputs batch with the sidebar's and only a Calculate submit reruns anything.
 _main_dg = get_dg_singleton_instance().main_dg
-_main_dg._form_data = _FormData("scenario_form")
-
-# The HTML reset buttons embed each model's paper-baseline values as JSON;
-# the page JS applies them client-side without any form submission.
-model_baselines = {key: json.dumps({k: _widget_state_from_scenario(Scenario())[k] for k in MODEL_WIDGET_KEYS[key]}) for key, _ in COST_MODELS}
 
 # Cost-assumption rail and panel: slim vertical model tabs on the right
 # edge of the page (a bottom strip on phones). The tabs are pure-HTML radio
@@ -2061,12 +2151,29 @@ model_baselines = {key: json.dumps({k: _widget_state_from_scenario(Scenario())[k
 # Wide centered Calculate button in the top header: it stays visible while
 # the sidebar or a cost panel is open, so it works after either kind of edit.
 # (Hidden on phones, where the sheet bar and the panel bar cover the flows.)
-with st.container(key="calculate-anchor"):
-    st.markdown(
-        '<button type="button" class="global-reset-btn" '
-        f"data-values='{global_baseline_values}'>Reset all inputs to paper baseline</button>",
-        unsafe_allow_html=True,
+with st.container(key="global-reset-btn"):
+    st.button(
+        "Reset all inputs to paper baseline",
+        key="global_reset",
+        on_click=_reset_widget_keys,
+        args=(WIDGET_KEYS,),
     )
+
+_main_dg._form_data = _FormData("scenario_form")
+
+
+def _render_model_reset(model_key: str) -> None:
+    with st.container(key=f"model-reset-{model_key}"):
+        st.form_submit_button(
+            "Reset to defaults",
+            key=f"reset_{model_key}",
+            on_click=_reset_widget_keys,
+            args=(MODEL_WIDGET_KEYS[model_key],),
+            icon=":material/refresh:",
+        )
+
+
+with st.container(key="calculate-anchor"):
     calculate_header = st.form_submit_button(
         "Calculate",
         key="calculate_header",
@@ -2092,6 +2199,7 @@ with st.container(key="cost-rail"):
 
 with st.container(key="cost-panel"):
     st.markdown(
+        '<div class="cost-panel-header">'
         '<div class="sidebar-kicker">Cost assumptions</div>'
         '<div class="cost-panel-title cost-title-none">Cost assumptions</div>'
         '<div class="cost-panel-title cost-title-dna">DNA cost assumptions</div>'
@@ -2099,16 +2207,18 @@ with st.container(key="cost-panel"):
         '<div class="cost-panel-title cost-title-azure">Azure Blob Archive assumptions</div>'
         '<div class="cost-panel-title cost-title-tape">Tape on-premise assumptions</div>'
         '<div class="cost-panel-title cost-title-custom">Custom storage assumptions</div>'
-        '<p class="cost-panel-deck">Editable unit costs, decline rates, and replacement cycles for each storage model. Changes apply when you press Calculate.</p>',
+        '<p class="cost-panel-deck">Editable unit costs, decline rates, and replacement cycles for each storage model. Changes apply when you press Calculate.</p>'
+        '<div class="cost-panel-summary cost-summary-dna"><span>Synthesis</span><span>Sequencing</span><span>Durability</span></div>'
+        '<div class="cost-panel-summary cost-summary-amazon"><span>Requests</span><span>Retrieval</span><span>Storage</span></div>'
+        '<div class="cost-panel-summary cost-summary-azure"><span>Operations</span><span>Retrieval</span><span>Archive tier</span></div>'
+        '<div class="cost-panel-summary cost-summary-tape"><span>Media</span><span>Hardware</span><span>Energy</span></div>'
+        '<div class="cost-panel-summary cost-summary-custom"><span>Write</span><span>Store</span><span>Retrieve</span></div>'
+        '</div>',
         unsafe_allow_html=True,
     )
 
     with st.container(key="cost_model_dna"):
-        st.markdown(
-            '<button type="button" class="model-reset-btn" data-model="dna" '
-            f'data-values=\'{model_baselines["dna"]}\'>\u21ba Reset to defaults</button>',
-            unsafe_allow_html=True,
-        )
+        _render_model_reset("dna")
         dna_cost_base_year = st.number_input(
             "DNA cost base year", min_value=2000, max_value=2500,
             key="dna_cost_base_year",
@@ -2141,11 +2251,7 @@ with st.container(key="cost-panel"):
         )
 
     with st.container(key="cost_model_amazon"):
-        st.markdown(
-            '<button type="button" class="model-reset-btn" data-model="amazon" '
-            f'data-values=\'{model_baselines["amazon"]}\'>\u21ba Reset to defaults</button>',
-            unsafe_allow_html=True,
-        )
+        _render_model_reset("amazon")
         st.caption("Price reference")
         amazon_base_year = st.number_input(
             "Amazon price base year", min_value=2000, max_value=2500,
@@ -2184,11 +2290,7 @@ with st.container(key="cost-panel"):
         )
 
     with st.container(key="cost_model_azure"):
-        st.markdown(
-            '<button type="button" class="model-reset-btn" data-model="azure" '
-            f'data-values=\'{model_baselines["azure"]}\'>\u21ba Reset to defaults</button>',
-            unsafe_allow_html=True,
-        )
+        _render_model_reset("azure")
         st.caption("Price reference")
         azure_base_year = st.number_input(
             "Azure price base year", min_value=2000, max_value=2500,
@@ -2227,11 +2329,7 @@ with st.container(key="cost-panel"):
         )
 
     with st.container(key="cost_model_tape"):
-        st.markdown(
-            '<button type="button" class="model-reset-btn" data-model="tape" '
-            f'data-values=\'{model_baselines["tape"]}\'>\u21ba Reset to defaults</button>',
-            unsafe_allow_html=True,
-        )
+        _render_model_reset("tape")
         st.caption("Price reference")
         tape_base_year = st.number_input(
             "Tape price base year", min_value=2000, max_value=2500,
@@ -2280,11 +2378,7 @@ with st.container(key="cost-panel"):
         )
 
     with st.container(key="cost_model_custom"):
-        st.markdown(
-            '<button type="button" class="model-reset-btn" data-model="custom" '
-            f'data-values=\'{model_baselines["custom"]}\'>\u21ba Reset to defaults</button>',
-            unsafe_allow_html=True,
-        )
+        _render_model_reset("custom")
         custom_name = st.text_input(
             "Display name", key="custom_name",
             help="Name used for the custom technology in charts, tables, and downloads.",
@@ -2409,6 +2503,7 @@ st.markdown(
         <span class="model-item">{result.metadata['currency']}</span>
         <span class="model-item">Reviewed {result.metadata['last_reviewed']}</span>
         <span class="model-item">{result.metadata['disclaimer']}</span>
+        <span class="model-item"><a href="https://doi.org/10.48550/arXiv.2608.26342" target="_blank" rel="noopener">Paper / About</a></span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -2461,8 +2556,8 @@ else:
         metric_columns[3].metric("DNA lifecycle cost", _money(dna_total))
 
 st.markdown('<div class="workspace-kicker">Analysis workspace</div>', unsafe_allow_html=True)
-overview_tab, outlook_tab, dna_cost_tab, assumptions_tab = st.tabs(
-    ["Lifecycle", "Start-year outlook", "DNA unit costs", "Assumptions"]
+overview_tab, outlook_tab, dna_cost_tab, assumptions_tab, about_tab = st.tabs(
+    ["Lifecycle", "Start-year outlook", "DNA unit costs", "Assumptions", "About"]
 )
 
 with overview_tab:
@@ -2689,3 +2784,32 @@ with assumptions_tab:
         st.subheader("Sources")
         for source in assumptions["sources"].values():
             st.markdown(f"- [{source['label']}]({source['url']})")
+
+with about_tab:
+    _section_intro(
+        "About this explorer",
+        "An interactive implementation of a DNA storage cost model for comparing long-run archival "
+        "economics across DNA, cloud archive, tape, and user-defined storage systems.",
+    )
+    about_column, paper_column = st.columns([1.25, 1], gap="large")
+    with about_column:
+        st.subheader("Purpose")
+        st.write(
+            "The explorer turns the model assumptions into adjustable controls, then recalculates "
+            "lifecycle cost, start-year sensitivity, and DNA unit-cost trajectories for the selected "
+            "archive workload."
+        )
+        st.subheader("Model boundary")
+        st.write(
+            "The results are scenario estimates, not procurement quotes. They use the visible inputs "
+            "and listed assumptions, and exclude operational details such as labor, taxes, cloud egress, "
+            "retrieval latency, and migration execution risk."
+        )
+    with paper_column:
+        st.subheader("Reference paper")
+        st.markdown(
+            "[DNA Storage Cost Model](https://doi.org/10.48550/arXiv.2608.26342)"
+        )
+        st.write(
+            "Use the linked paper as the source reference for the model framing and baseline assumptions."
+        )
