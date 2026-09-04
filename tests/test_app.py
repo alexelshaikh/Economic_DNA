@@ -80,14 +80,28 @@ class StreamlitAppTests(unittest.TestCase):
     def test_builtin_models_have_separate_editable_assumption_panels(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
         self.assertFalse(app.exception)
-        labels = [expander.label for expander in app.expander]
-        self.assertIn("Amazon Deep Archive assumptions", labels)
-        self.assertIn("Azure Blob Archive assumptions", labels)
-        self.assertIn("Tape on-premise assumptions", labels)
-        self.assertNotIn("Other assumptions and chart settings", labels)
+        rail_labels = [
+            button.label
+            for button in app.button
+            if button.key and button.key.startswith("cost_tab_")
+        ]
+        self.assertEqual(rail_labels, ["DNA", "Amazon", "Azure", "Tape", "Custom"])
+        # The panel widgets are always mounted (hidden by CSS when closed).
         self.assertEqual(app.number_input(key="amazon_put_per_1000").value, 0.05)
         self.assertEqual(app.number_input(key="azure_storage_per_tb_month").value, 1.953125)
         self.assertEqual(app.number_input(key="tape_media_per_tb").value, 6.39)
+
+    def test_cost_tab_toggles_open_model(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self.assertIsNone(app.session_state["open_cost_model"])
+        next(button for button in app.button if button.key == "cost_tab_amazon").click()
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.session_state["open_cost_model"], "amazon")
+        # Clicking the same tab again closes the panel.
+        next(button for button in app.button if button.key == "cost_tab_amazon").click()
+        app.run()
+        self.assertIsNone(app.session_state["open_cost_model"])
 
 
 if __name__ == "__main__":

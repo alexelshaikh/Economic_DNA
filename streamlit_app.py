@@ -146,24 +146,17 @@ st.markdown(
     html:has(.theme-marker.theme-dark) [data-testid="stStatusWidgetRunningIcon"] svg {
         filter: drop-shadow(0 0 4px rgba(231, 237, 235, 0.35));
     }
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stExpander"] summary {
-        background: var(--surface) !important;
-        color: var(--ink-soft) !important;
-    }
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stExpander"] summary span {
-        color: var(--ink-soft) !important;
-    }
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stExpander"] summary:hover,
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stExpander"] details[open] summary {
-        background: var(--surface-subtle) !important;
-    }
     html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] input[data-testid="stNumberInputField"],
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stSelectbox"] input {
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stSelectbox"] input,
+    html:has(.theme-marker.theme-dark) .st-key-cost-panel input[data-testid="stNumberInputField"],
+    html:has(.theme-marker.theme-dark) .st-key-cost-panel input[data-testid="stTextInput"] {
         color: var(--ink) !important;
         -webkit-text-fill-color: var(--ink) !important;
     }
     html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stNumberInputStepUp"],
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stNumberInputStepDown"] {
+    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stNumberInputStepDown"],
+    html:has(.theme-marker.theme-dark) .st-key-cost-panel [data-testid="stNumberInputStepUp"],
+    html:has(.theme-marker.theme-dark) .st-key-cost-panel [data-testid="stNumberInputStepDown"] {
         color: var(--muted) !important;
     }
     html:has(.theme-marker.theme-dark) div:has(> [role="listbox"]) {
@@ -195,6 +188,8 @@ st.markdown(
     }
     [data-testid="stHeader"] {
         background: var(--header-bg);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
         border-bottom: 1px solid var(--line);
         transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
     }
@@ -217,7 +212,8 @@ st.markdown(
     }
     .block-container {
         max-width: 1440px;
-        padding: 4.75rem 2.2rem 4rem;
+        /* Right gutter reserves space for the floating cost-assumption rail. */
+        padding: 4.75rem 5.4rem 4rem 2.2rem;
     }
 
     h1, h2, h3, p { letter-spacing: 0; }
@@ -284,7 +280,8 @@ st.markdown(
         padding-top: 0.9rem;
         text-transform: uppercase;
     }
-    section[data-testid="stSidebar"] label p {
+    section[data-testid="stSidebar"] label p,
+    .st-key-cost-panel label p {
         color: var(--ink-soft);
         font-size: 0.82rem;
         font-weight: 600;
@@ -296,24 +293,19 @@ st.markdown(
         margin: 0 0 0.3rem;
     }
     section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"],
-    section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input) {
+    section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input),
+    .st-key-cost-panel [data-testid="stNumberInputContainer"],
+    .st-key-cost-panel [data-testid="stTextInput"] {
         background: var(--surface);
         border-color: var(--line-strong);
         border-radius: 6px;
     }
     section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"]:focus-within,
-    section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input):focus-within {
+    section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input):focus-within,
+    .st-key-cost-panel [data-testid="stNumberInputContainer"]:focus-within,
+    .st-key-cost-panel [data-testid="stTextInput"]:focus-within {
         border-color: var(--accent);
         box-shadow: 0 0 0 1px var(--accent);
-    }
-    section[data-testid="stSidebar"] [data-testid="stExpander"] {
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        margin-bottom: 0.55rem;
-    }
-    section[data-testid="stSidebar"] [data-testid="stExpander"] details summary {
-        min-height: 2.75rem;
     }
     section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
         background: var(--surface);
@@ -476,6 +468,184 @@ st.markdown(
         color: var(--download-text);
     }
 
+    /* On desktop the sidebar's Calculate is hidden: the wide centered header
+       button is the single always-visible Calculate (phones keep the bar,
+       see the 640px media query). */
+    section[data-testid="stSidebar"] .st-key-scenario-action-rail {
+        display: none;
+    }
+    /* Header Calculate: pinned to the top bar, centered in the space between
+       the left controls and the theme toggle / status widget on the right.
+       It pulses while changes are pending. */
+    .st-key-calculate-anchor .stButton button {
+        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
+        border: none;
+        border-radius: 10px;
+        box-shadow: var(--shadow-md);
+        color: var(--action-text);
+        font-size: 1.05rem;
+        font-weight: 700;
+        left: 50%;
+        letter-spacing: 0.02em;
+        min-height: 2.5rem;
+        position: fixed;
+        top: 0.7rem;
+        transform: translateX(-50%);
+        width: min(36rem, calc(100vw - 24rem)) !important;
+        z-index: 999990;
+    }
+    .st-key-calculate-anchor .stButton button:hover {
+        filter: brightness(1.07);
+    }
+    .st-key-calculate-anchor .stButton button:active {
+        transform: translateX(-50%) translateY(1px) scale(0.99);
+    }
+    .st-key-calculate-anchor:has(.pending-marker) .stButton button {
+        animation: pending-pulse 1.9s var(--ease) infinite;
+    }
+    html:has(.theme-marker.theme-dark) .st-key-calculate-anchor .stButton button {
+        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
+        color: var(--action-text);
+    }
+    /* The panel's Calculate bar (phones only — the header button covers
+       desktop) sits sticky at the bottom of the scrolling panel sheet. */
+    .st-key-calculate_panel {
+        display: none;
+    }
+    html:has(.theme-marker.theme-dark) .st-key-calculate_panel button {
+        background: var(--action-bg);
+        border-color: var(--action-bg);
+        color: var(--action-text);
+    }
+
+    /* Cost-assumption rail: slim vertical model tabs pinned to the right
+       edge of the page; the panel opens beside the rail. Each handle carries
+       the model name (not just an arrow) so the tabs read as what they are.
+       On phones the rail becomes a bottom tab strip and the panel a bottom
+       sheet (see the 640px media query). The panel's widgets stay mounted
+       even when hidden (CSS display:none, not unmounted), so edits survive
+       closing and reopening. */
+    .st-key-cost-rail {
+        position: fixed;
+        right: 0.9rem;
+        top: 4.6rem;
+        z-index: 999900;
+        width: 3.9rem;
+    }
+    .st-key-cost-rail [data-testid="stVerticalBlock"] {
+        gap: 0.55rem !important;
+    }
+    .st-key-cost-rail [data-testid="stElementContainer"] {
+        width: 3.9rem;
+    }
+    .st-key-cost-rail .stButton button {
+        align-items: center;
+        background: var(--surface);
+        border-color: var(--line);
+        border-radius: 999px;
+        box-shadow: var(--shadow-sm);
+        color: var(--muted);
+        display: flex;
+        font-size: 0.78rem;
+        font-weight: 700;
+        justify-content: center;
+        letter-spacing: 0.06em;
+        min-height: 0;
+        padding: 1rem 0.15rem;
+        text-transform: uppercase;
+        transform: rotate(180deg);
+        transition: border-color 120ms ease, background-color 120ms ease,
+            color 120ms ease, transform 90ms ease, box-shadow 120ms ease;
+        white-space: nowrap;
+        width: 3.9rem !important;
+        writing-mode: vertical-rl;
+    }
+    /* Direction arrow on each tab: in the rotated vertical writing mode the
+       right-pointing glyph renders pointing left, toward the panel. On phones
+       (horizontal strip) it is swapped for an up arrow — see the 640px query. */
+    .st-key-cost-rail .stButton button::after {
+        content: "→";
+        font-size: 0.9rem;
+        line-height: 1;
+        margin-top: 0.4rem;
+    }
+    .st-key-cost-rail .stButton button:hover {
+        border-color: var(--accent);
+        color: var(--accent-strong);
+    }
+    .st-key-cost-rail .stButton button:active {
+        transform: rotate(180deg) translateY(1px) scale(0.985);
+    }
+    .st-key-cost-rail .stButton button[kind="primary"] {
+        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
+        border-color: var(--action-bg);
+        color: var(--action-text);
+    }
+    .st-key-cost-panel {
+        animation: panel-in 0.22s var(--ease);
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        box-shadow: var(--shadow-lg);
+        max-height: calc(100vh - 7rem);
+        overflow-y: auto;
+        padding: 1.1rem 1.15rem 1.2rem;
+        position: fixed;
+        right: 5.3rem;
+        top: 4.6rem;
+        width: min(24rem, calc(100vw - 6.6rem));
+        z-index: 999900;
+    }
+    @keyframes panel-in {
+        from { opacity: 0; transform: translateX(10px); }
+        to { opacity: 1; transform: none; }
+    }
+    .st-key-cost-panel:has(.cost-open-none) { display: none; }
+    .st-key-cost-panel [class*="st-key-cost_model_"] { display: none; }
+    .st-key-cost-panel:has(.cost-open-dna) .st-key-cost_model_dna { display: block; }
+    .st-key-cost-panel:has(.cost-open-amazon) .st-key-cost_model_amazon { display: block; }
+    .st-key-cost-panel:has(.cost-open-azure) .st-key-cost_model_azure { display: block; }
+    .st-key-cost-panel:has(.cost-open-tape) .st-key-cost_model_tape { display: block; }
+    .st-key-cost-panel:has(.cost-open-custom) .st-key-cost_model_custom { display: block; }
+    .st-key-cost-panel .st-key-close_cost_panel {
+        height: 2rem;
+        position: absolute;
+        right: 0.85rem;
+        top: 0.85rem;
+        width: 2rem;
+        z-index: 2;
+    }
+    .st-key-cost-panel .st-key-close_cost_panel button {
+        background: transparent;
+        border-color: transparent;
+        border-radius: 999px;
+        color: var(--muted);
+        flex: 0 0 auto;
+        height: 2rem !important;
+        min-height: 2rem;
+        min-width: 2rem;
+        padding: 0;
+        width: 2rem !important;
+    }
+    .st-key-cost-panel .st-key-close_cost_panel button:hover {
+        background: var(--surface-subtle);
+        border-color: var(--line);
+        color: var(--ink);
+    }
+    .st-key-cost-panel .cost-panel-title {
+        color: var(--ink);
+        font-size: 1.15rem;
+        font-weight: 720;
+        line-height: 1.3;
+        margin: 0.2rem 2.4rem 0.35rem 0;
+    }
+    .st-key-cost-panel .cost-panel-deck {
+        color: var(--muted);
+        font-size: 0.84rem;
+        line-height: 1.5;
+        margin: 0 0 0.95rem;
+    }
+
     .page-kicker { margin-bottom: 0.35rem; }
     .page-deck {
         color: var(--muted);
@@ -489,7 +659,7 @@ st.markdown(
         background: var(--surface);
         border: 1px solid var(--line);
         border-left: 3px solid var(--accent);
-        border-radius: 10px;
+        border-radius: 12px;
         color: var(--muted);
         display: flex;
         flex-wrap: wrap;
@@ -512,7 +682,7 @@ st.markdown(
         align-items: center;
         background: var(--surface-subtle);
         border: 1px solid var(--line);
-        border-radius: 10px;
+        border-radius: 12px;
         color: var(--muted);
         display: flex;
         flex-wrap: wrap;
@@ -547,7 +717,7 @@ st.markdown(
         animation: fade-up 0.45s var(--ease) both;
         background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 10px;
+        border-radius: 12px;
         box-shadow: var(--shadow-sm);
         min-height: 114px;
         overflow: hidden;
@@ -579,7 +749,12 @@ st.markdown(
     [data-testid="stMetricValue"] {
         color: var(--ink);
         font-size: 1.48rem;
+        font-weight: 700;
         line-height: 1.2;
+    }
+    button:focus-visible, input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
     }
     [data-testid="stMetricDelta"] { color: var(--muted); }
 
@@ -649,7 +824,7 @@ st.markdown(
         animation: fade-up 0.5s var(--ease) both;
         background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 10px;
+        border-radius: 12px;
         box-shadow: var(--shadow-sm);
         overflow: hidden;
         padding: 0.2rem;
@@ -662,7 +837,7 @@ st.markdown(
     .contract-card {
         background: var(--surface);
         border: 1px solid var(--line);
-        border-radius: 10px;
+        border-radius: 12px;
         box-shadow: var(--shadow-sm);
         overflow: hidden;
         transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
@@ -710,11 +885,12 @@ st.markdown(
         section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) {
             gap: 0.5rem !important;
         }
-        .block-container { padding: 4.5rem 1rem 3rem; }
+        .block-container { padding: 4.5rem 5.4rem 3rem 1rem; }
         .model-item { border-right: 0; }
         /* 16px inputs stop iOS Safari auto-zooming into the field on focus
            (below 16px it zooms; this also covers phones in landscape). */
-        section[data-testid="stSidebar"] input {
+        section[data-testid="stSidebar"] input,
+        .st-key-cost-panel input {
             font-size: 16px !important;
         }
         /* Main columns stack whenever the main area is narrow (Streamlit only
@@ -849,7 +1025,79 @@ st.markdown(
             white-space: normal !important;
             overflow-wrap: anywhere;
         }
-        .block-container { padding: 4.25rem 0.75rem 2.5rem; }
+        /* Phones: the cost rail becomes a horizontal tab strip pinned to the
+           bottom edge, and the panel opens upward as a bottom sheet. Extra
+           bottom padding keeps the page content clear of the strip. */
+        .st-key-cost-rail {
+            bottom: 0.6rem;
+            left: 0.6rem;
+            right: 0.6rem;
+            top: auto;
+            width: auto;
+        }
+        .st-key-cost-rail [data-testid="stVerticalBlock"] {
+            flex-direction: row !important;
+            gap: 0.35rem !important;
+        }
+        .st-key-cost-rail [data-testid="stElementContainer"] {
+            flex: 1;
+            width: auto;
+        }
+        .st-key-cost-rail .stButton button {
+            font-size: 0.7rem;
+            height: 2.6rem;
+            min-height: 2.6rem;
+            padding: 0 0.4rem;
+            transform: none;
+            width: 100% !important;
+            writing-mode: horizontal-tb;
+        }
+        .st-key-cost-rail .stButton button::after {
+            content: "↑";
+            font-size: 0.75rem;
+            margin-left: 0.25rem;
+            margin-top: 0;
+        }
+        .st-key-cost-rail .stButton button:active {
+            transform: translateY(1px) scale(0.985);
+        }
+        .st-key-cost-panel {
+            bottom: 3.7rem;
+            left: 0.6rem;
+            max-height: 55vh;
+            right: 0.6rem;
+            top: auto;
+            width: auto;
+        }
+        /* Phones keep the sheet's bottom Calculate bar and hide the header
+           button (the header is too crowded at phone width). */
+        section[data-testid="stSidebar"] .st-key-scenario-action-rail {
+            display: block;
+        }
+        .st-key-calculate-anchor {
+            display: none;
+        }
+        .st-key-calculate_panel {
+            background: var(--surface);
+            bottom: -1.2rem;
+            display: block;
+            padding-top: 0.45rem;
+            position: sticky;
+            z-index: 2;
+        }
+        .st-key-calculate_panel button {
+            background: var(--action-bg);
+            border-color: var(--action-bg);
+            border-radius: 10px;
+            color: var(--action-text);
+            font-weight: 700;
+            min-height: 2.75rem;
+            width: 100% !important;
+        }
+        .st-key-cost-panel:has(.pending-marker) .st-key-calculate_panel button {
+            animation: pending-pulse 1.9s var(--ease) infinite;
+        }
+        .block-container { padding: 4.25rem 0.75rem 6.5rem; }
         h1 { font-size: 1.8rem; }
         .page-deck { font-size: 0.92rem; }
         [data-testid="stMetric"] { min-height: 96px; padding: 0.8rem 0.75rem; }
@@ -951,6 +1199,26 @@ with st.container(key="theme-toggle-anchor"):
         st.session_state["theme"] = new_theme
         st.query_params["theme"] = new_theme
         st.rerun()
+
+# Cost-assumption models for the right-edge rail. Each key is a widget prefix
+# (matching the scenario parameter names), and the label is the tab handle.
+COST_MODELS = [
+    ("dna", "DNA"),
+    ("amazon", "Amazon"),
+    ("azure", "Azure"),
+    ("tape", "Tape"),
+    ("custom", "Custom"),
+]
+
+
+def _toggle_cost_model(model_key: str) -> None:
+    st.session_state["open_cost_model"] = (
+        None if st.session_state.get("open_cost_model") == model_key else model_key
+    )
+
+
+def _close_cost_panel() -> None:
+    st.session_state["open_cost_model"] = None
 
 
 WIDGET_KEYS = [
@@ -1292,7 +1560,7 @@ with st.sidebar:
             """
             <div class="sidebar-kicker">Scenario builder</div>
             <div class="sidebar-title">Model inputs</div>
-            <p class="sidebar-copy">Archive workload, time horizon, and technology assumptions.</p>
+            <p class="sidebar-copy">Archive workload, time horizon, and technology selection. Cost assumptions live in the tabs on the right edge of the page.</p>
             """,
             unsafe_allow_html=True,
         )
@@ -1398,206 +1666,10 @@ with st.sidebar:
                 )
 
         st.markdown('<div class="sidebar-section">Cost assumptions</div>', unsafe_allow_html=True)
-        with st.expander("DNA cost assumptions"):
-            dna_cost_base_year = st.number_input(
-                "DNA cost base year", min_value=2000, max_value=2500,
-                key="dna_cost_base_year",
-                help="Year to which the editable synthesis and sequencing unit costs apply.",
-            )
-            dna_synthesis_cost = st.number_input(
-                "Synthesis cost (USD/MB)", min_value=0.0,
-                format="%.6f", key="dna_synthesis_cost",
-                help="Cost in the DNA cost base year to synthesize enough bases for 1 MB of logical data, before redundancy and indexing overhead.",
-            )
-            dna_sequencing_cost = st.number_input(
-                "Sequencing cost (USD/MB)", min_value=0.0,
-                format="%.8f", key="dna_sequencing_cost",
-                help="Cost in the DNA cost base year to sequence 1 MB of retrieved logical data.",
-            )
-            synthesis_decline = st.number_input(
-                "Synthesis annual decline (%)", min_value=0.0, max_value=99.99,
-                key="synthesis_decline",
-                help="Percentage by which synthesis cost is assumed to fall each calendar year.",
-            )
-            sequencing_decline = st.number_input(
-                "Sequencing annual decline (%)", min_value=0.0, max_value=99.99,
-                key="sequencing_decline",
-                help="Percentage by which sequencing cost is assumed to fall each calendar year.",
-            )
-            dna_durability = st.number_input(
-                "DNA durability (years)", min_value=1, max_value=10_000,
-                key="dna_durability",
-                help="Years before the archive must be synthesized again. No replacement occurs at the exact end of the horizon.",
-            )
-
-        with st.expander("Amazon Deep Archive assumptions"):
-            st.caption("Price reference")
-            amazon_base_year = st.number_input(
-                "Amazon price base year", min_value=2000, max_value=2500,
-                key="amazon_base_year",
-                help="Calendar year to which all Amazon prices below apply.",
-            )
-            amazon_decline = st.number_input(
-                "Amazon annual price decline (%)", min_value=0.0, max_value=99.99,
-                key="amazon_decline",
-                help="Annual reduction applied to Amazon request, retrieval, and storage prices.",
-            )
-            st.caption("Base-year prices")
-            amazon_put_per_1000 = st.number_input(
-                "Write requests (USD/1,000)", min_value=0.0,
-                format="%.6f",
-                key="amazon_put_per_1000",
-                help="Charge for 1,000 requests when the archive is initially written.",
-            )
-            amazon_restore_per_1000 = st.number_input(
-                "Bulk restore requests (USD/1,000)", min_value=0.0,
-                format="%.6f",
-                key="amazon_restore_per_1000",
-                help="Charge for 1,000 bulk restore-job requests. Asset size determines the request count.",
-            )
-            amazon_retrieval_per_tb = st.number_input(
-                "Bulk data retrieval (USD/TB)", min_value=0.0,
-                format="%.6f",
-                key="amazon_retrieval_per_tb",
-                help="Capacity charge for retrieving one TB of archived data.",
-            )
-            amazon_storage_per_tb_month = st.number_input(
-                "Storage (USD/TB/month)", min_value=0.0,
-                format="%.6f",
-                key="amazon_storage_per_tb_month",
-                help="Recurring monthly charge to retain one TB in Deep Archive.",
-            )
-
-        with st.expander("Azure Blob Archive assumptions"):
-            st.caption("Price reference")
-            azure_base_year = st.number_input(
-                "Azure price base year", min_value=2000, max_value=2500,
-                key="azure_base_year",
-                help="Calendar year to which all Azure prices below apply.",
-            )
-            azure_decline = st.number_input(
-                "Azure annual price decline (%)", min_value=0.0, max_value=99.99,
-                key="azure_decline",
-                help="Annual reduction applied to Azure request, retrieval, and storage prices.",
-            )
-            st.caption("Base-year prices")
-            azure_write_per_1000 = st.number_input(
-                "Write requests (USD/1,000)", min_value=0.0,
-                format="%.6f",
-                key="azure_write_per_1000",
-                help="Charge for 1,000 requests when the archive is initially written.",
-            )
-            azure_read_per_1000 = st.number_input(
-                "Read requests (USD/1,000)", min_value=0.0,
-                format="%.6f",
-                key="azure_read_per_1000",
-                help="Charge for 1,000 retrieval requests. Asset size determines the request count.",
-            )
-            azure_retrieval_per_tb = st.number_input(
-                "Data retrieval (USD/TB)", min_value=0.0,
-                format="%.6f",
-                key="azure_retrieval_per_tb",
-                help="Capacity charge for retrieving one TB from the Archive tier.",
-            )
-            azure_storage_per_tb_month = st.number_input(
-                "Storage (USD/TB/month)", min_value=0.0,
-                format="%.6f",
-                key="azure_storage_per_tb_month",
-                help="Recurring monthly charge to retain one TB in the Archive tier.",
-            )
-
-        with st.expander("Tape on-premise assumptions"):
-            st.caption("Price reference")
-            tape_base_year = st.number_input(
-                "Tape price base year", min_value=2000, max_value=2500,
-                key="tape_base_year",
-                help="Calendar year to which the tape media, hardware, and energy prices apply.",
-            )
-            tape_durability = st.number_input(
-                "Tape durability (years)", min_value=1, max_value=1_000,
-                key="tape_durability",
-                help="Years between complete tape media replacement writes.",
-            )
-            st.caption("Base-year prices")
-            tape_media_per_tb = st.number_input(
-                "Tape media (USD/TB)", min_value=0.0,
-                format="%.6f",
-                key="tape_media_per_tb",
-                help="Media purchase cost for one TB, charged on the initial write and every replacement.",
-            )
-            tape_hardware_per_tb = st.number_input(
-                "Hardware (USD/TB)", min_value=0.0,
-                format="%.6f",
-                key="tape_hardware_per_tb",
-                help="Hardware cost allocated per TB and amortized over the selected durability period.",
-            )
-            tape_energy_per_tb_year = st.number_input(
-                "Energy (USD/TB/year)", min_value=0.0,
-                format="%.6f",
-                key="tape_energy_per_tb_year",
-                help="Annual energy cost to retain one TB in the tape system.",
-            )
-            st.caption("Annual price declines")
-            tape_media_decline = st.number_input(
-                "Tape media decline (%)", min_value=0.0, max_value=99.99,
-                key="tape_media_decline",
-                help="Annual reduction applied to tape media purchase prices.",
-            )
-            tape_hardware_decline = st.number_input(
-                "Tape hardware decline (%)", min_value=0.0, max_value=99.99,
-                key="tape_hardware_decline",
-                help="Annual reduction applied to amortized tape hardware costs.",
-            )
-            tape_energy_decline = st.number_input(
-                "Tape energy decline (%)", min_value=0.0, max_value=99.99,
-                key="tape_energy_decline",
-                help="Annual reduction applied to tape energy costs.",
-            )
-
-        with st.expander("Custom storage assumptions"):
-            custom_name = st.text_input(
-                "Display name", key="custom_name",
-                help="Name used for the custom technology in charts, tables, and downloads.",
-            )
-            custom_base_year = st.number_input(
-                "Price base year", min_value=2000, max_value=2500,
-                key="custom_base_year", help="Year to which all custom prices apply.",
-            )
-            custom_write_tb = st.number_input(
-                "Initial write cost (USD/TB)", min_value=0.0,
-                key="custom_write_tb", help="Capacity-based charge to write or replace one TB.",
-            )
-            custom_write_asset = st.number_input(
-                "Write request cost (USD/asset)", min_value=0.0,
-                key="custom_write_asset",
-                help="Per-file or per-object charge applied when the archive is written or replaced.",
-            )
-            custom_storage_tb_year = st.number_input(
-                "Annual storage cost (USD/TB)", min_value=0.0,
-                key="custom_storage_tb_year",
-                help="Recurring cost to retain one TB for one year.",
-            )
-            custom_retrieval_tb = st.number_input(
-                "Retrieval cost (USD/TB)", min_value=0.0,
-                key="custom_retrieval_tb",
-                help="Capacity-based charge for each TB retrieved.",
-            )
-            custom_retrieval_asset = st.number_input(
-                "Retrieval request cost (USD/asset)", min_value=0.0,
-                key="custom_retrieval_asset",
-                help="Per-file or per-object charge for the expected assets retrieved each year.",
-            )
-            custom_decline = st.number_input(
-                "Annual price decline (%)", min_value=0.0, max_value=99.99,
-                key="custom_decline",
-                help="Annual percentage reduction applied to every custom price.",
-            )
-            custom_replacement = st.number_input(
-                "Replacement interval (years)", min_value=0, max_value=10_000,
-                key="custom_replacement",
-                help="Years between complete rewrites. Use 0 for a service with no replacement writes.",
-            )
-
+        st.markdown(
+            '<p class="sidebar-copy">Editable unit costs and decline rates for each storage model live in the tabs on the right edge of the page.</p>',
+            unsafe_allow_html=True,
+        )
     with action_column:
         with st.container(key="scenario-action-rail"):
             if pending:
@@ -1605,12 +1677,292 @@ with st.sidebar:
                     '<span class="pending-marker" aria-hidden="true"></span>',
                     unsafe_allow_html=True,
                 )
-            submitted = st.button(
+            # The mobile bottom bar; hidden on desktop, where the wide
+            # centered header button is the primary Calculate.
+            calculate_scenario = st.button(
                 "Calculate",
                 type="primary",
                 key="calculate_scenario",
                 width="stretch",
             )
+
+# Cost-assumption rail and panel: slim vertical model tabs on the right
+# edge of the page (a bottom strip on phones); clicking a tab opens the
+# floating panel beside the rail. All five model blocks stay mounted and
+# CSS shows only the active one, so edits survive closing and switching.
+st.session_state.setdefault("open_cost_model", None)
+open_cost_model = st.session_state["open_cost_model"]
+
+# Wide centered Calculate button in the top header: it stays visible while
+# the sidebar or a cost panel is open, so it works after either kind of edit.
+# (Hidden on phones, where the sheet bar and the panel bar cover the flows.)
+with st.container(key="calculate-anchor"):
+    if pending:
+        st.markdown(
+            '<span class="pending-marker" aria-hidden="true"></span>',
+            unsafe_allow_html=True,
+        )
+    calculate_header = st.button(
+        "Calculate",
+        key="calculate_header",
+        type="primary",
+        width="stretch",
+    )
+
+with st.container(key="cost-rail"):
+    for model_key, model_label in COST_MODELS:
+        st.button(
+            model_label,
+            key=f"cost_tab_{model_key}",
+            type="primary" if open_cost_model == model_key else "secondary",
+            on_click=_toggle_cost_model,
+            args=(model_key,),
+            width="stretch",
+        )
+
+with st.container(key="cost-panel"):
+    st.markdown(
+        f'<div class="cost-open-marker cost-open-{open_cost_model or "none"}" hidden></div>',
+        unsafe_allow_html=True,
+    )
+    st.button(
+        label=None,
+        key="close_cost_panel",
+        icon=":material/close:",
+        on_click=_close_cost_panel,
+        help="Close the cost assumptions panel.",
+    )
+    panel_titles = {
+        "dna": "DNA cost assumptions",
+        "amazon": "Amazon Deep Archive assumptions",
+        "azure": "Azure Blob Archive assumptions",
+        "tape": "Tape on-premise assumptions",
+        "custom": "Custom storage assumptions",
+    }
+    st.markdown(
+        f'<div class="sidebar-kicker">Cost assumptions</div>'
+        f'<div class="cost-panel-title">{panel_titles.get(open_cost_model, "Cost assumptions")}</div>'
+        '<p class="cost-panel-deck">Editable unit costs, decline rates, and replacement cycles for each storage model. Changes apply when you press Calculate.</p>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="sidebar-section">Cost assumptions</div>', unsafe_allow_html=True)
+    with st.container(key="cost_model_dna"):
+        dna_cost_base_year = st.number_input(
+            "DNA cost base year", min_value=2000, max_value=2500,
+            key="dna_cost_base_year",
+            help="Year to which the editable synthesis and sequencing unit costs apply.",
+        )
+        dna_synthesis_cost = st.number_input(
+            "Synthesis cost (USD/MB)", min_value=0.0,
+            format="%.6f", key="dna_synthesis_cost",
+            help="Cost in the DNA cost base year to synthesize enough bases for 1 MB of logical data, before redundancy and indexing overhead.",
+        )
+        dna_sequencing_cost = st.number_input(
+            "Sequencing cost (USD/MB)", min_value=0.0,
+            format="%.8f", key="dna_sequencing_cost",
+            help="Cost in the DNA cost base year to sequence 1 MB of retrieved logical data.",
+        )
+        synthesis_decline = st.number_input(
+            "Synthesis annual decline (%)", min_value=0.0, max_value=99.99,
+            key="synthesis_decline",
+            help="Percentage by which synthesis cost is assumed to fall each calendar year.",
+        )
+        sequencing_decline = st.number_input(
+            "Sequencing annual decline (%)", min_value=0.0, max_value=99.99,
+            key="sequencing_decline",
+            help="Percentage by which sequencing cost is assumed to fall each calendar year.",
+        )
+        dna_durability = st.number_input(
+            "DNA durability (years)", min_value=1, max_value=10_000,
+            key="dna_durability",
+            help="Years before the archive must be synthesized again. No replacement occurs at the exact end of the horizon.",
+        )
+
+    with st.container(key="cost_model_amazon"):
+        st.caption("Price reference")
+        amazon_base_year = st.number_input(
+            "Amazon price base year", min_value=2000, max_value=2500,
+            key="amazon_base_year",
+            help="Calendar year to which all Amazon prices below apply.",
+        )
+        amazon_decline = st.number_input(
+            "Amazon annual price decline (%)", min_value=0.0, max_value=99.99,
+            key="amazon_decline",
+            help="Annual reduction applied to Amazon request, retrieval, and storage prices.",
+        )
+        st.caption("Base-year prices")
+        amazon_put_per_1000 = st.number_input(
+            "Write requests (USD/1,000)", min_value=0.0,
+            format="%.6f",
+            key="amazon_put_per_1000",
+            help="Charge for 1,000 requests when the archive is initially written.",
+        )
+        amazon_restore_per_1000 = st.number_input(
+            "Bulk restore requests (USD/1,000)", min_value=0.0,
+            format="%.6f",
+            key="amazon_restore_per_1000",
+            help="Charge for 1,000 bulk restore-job requests. Asset size determines the request count.",
+        )
+        amazon_retrieval_per_tb = st.number_input(
+            "Bulk data retrieval (USD/TB)", min_value=0.0,
+            format="%.6f",
+            key="amazon_retrieval_per_tb",
+            help="Capacity charge for retrieving one TB of archived data.",
+        )
+        amazon_storage_per_tb_month = st.number_input(
+            "Storage (USD/TB/month)", min_value=0.0,
+            format="%.6f",
+            key="amazon_storage_per_tb_month",
+            help="Recurring monthly charge to retain one TB in Deep Archive.",
+        )
+
+    with st.container(key="cost_model_azure"):
+        st.caption("Price reference")
+        azure_base_year = st.number_input(
+            "Azure price base year", min_value=2000, max_value=2500,
+            key="azure_base_year",
+            help="Calendar year to which all Azure prices below apply.",
+        )
+        azure_decline = st.number_input(
+            "Azure annual price decline (%)", min_value=0.0, max_value=99.99,
+            key="azure_decline",
+            help="Annual reduction applied to Azure request, retrieval, and storage prices.",
+        )
+        st.caption("Base-year prices")
+        azure_write_per_1000 = st.number_input(
+            "Write requests (USD/1,000)", min_value=0.0,
+            format="%.6f",
+            key="azure_write_per_1000",
+            help="Charge for 1,000 requests when the archive is initially written.",
+        )
+        azure_read_per_1000 = st.number_input(
+            "Read requests (USD/1,000)", min_value=0.0,
+            format="%.6f",
+            key="azure_read_per_1000",
+            help="Charge for 1,000 retrieval requests. Asset size determines the request count.",
+        )
+        azure_retrieval_per_tb = st.number_input(
+            "Data retrieval (USD/TB)", min_value=0.0,
+            format="%.6f",
+            key="azure_retrieval_per_tb",
+            help="Capacity charge for retrieving one TB from the Archive tier.",
+        )
+        azure_storage_per_tb_month = st.number_input(
+            "Storage (USD/TB/month)", min_value=0.0,
+            format="%.6f",
+            key="azure_storage_per_tb_month",
+            help="Recurring monthly charge to retain one TB in the Archive tier.",
+        )
+
+    with st.container(key="cost_model_tape"):
+        st.caption("Price reference")
+        tape_base_year = st.number_input(
+            "Tape price base year", min_value=2000, max_value=2500,
+            key="tape_base_year",
+            help="Calendar year to which the tape media, hardware, and energy prices apply.",
+        )
+        tape_durability = st.number_input(
+            "Tape durability (years)", min_value=1, max_value=1_000,
+            key="tape_durability",
+            help="Years between complete tape media replacement writes.",
+        )
+        st.caption("Base-year prices")
+        tape_media_per_tb = st.number_input(
+            "Tape media (USD/TB)", min_value=0.0,
+            format="%.6f",
+            key="tape_media_per_tb",
+            help="Media purchase cost for one TB, charged on the initial write and every replacement.",
+        )
+        tape_hardware_per_tb = st.number_input(
+            "Hardware (USD/TB)", min_value=0.0,
+            format="%.6f",
+            key="tape_hardware_per_tb",
+            help="Hardware cost allocated per TB and amortized over the selected durability period.",
+        )
+        tape_energy_per_tb_year = st.number_input(
+            "Energy (USD/TB/year)", min_value=0.0,
+            format="%.6f",
+            key="tape_energy_per_tb_year",
+            help="Annual energy cost to retain one TB in the tape system.",
+        )
+        st.caption("Annual price declines")
+        tape_media_decline = st.number_input(
+            "Tape media decline (%)", min_value=0.0, max_value=99.99,
+            key="tape_media_decline",
+            help="Annual reduction applied to tape media purchase prices.",
+        )
+        tape_hardware_decline = st.number_input(
+            "Tape hardware decline (%)", min_value=0.0, max_value=99.99,
+            key="tape_hardware_decline",
+            help="Annual reduction applied to amortized tape hardware costs.",
+        )
+        tape_energy_decline = st.number_input(
+            "Tape energy decline (%)", min_value=0.0, max_value=99.99,
+            key="tape_energy_decline",
+            help="Annual reduction applied to tape energy costs.",
+        )
+
+    with st.container(key="cost_model_custom"):
+        custom_name = st.text_input(
+            "Display name", key="custom_name",
+            help="Name used for the custom technology in charts, tables, and downloads.",
+        )
+        custom_base_year = st.number_input(
+            "Price base year", min_value=2000, max_value=2500,
+            key="custom_base_year", help="Year to which all custom prices apply.",
+        )
+        custom_write_tb = st.number_input(
+            "Initial write cost (USD/TB)", min_value=0.0,
+            key="custom_write_tb", help="Capacity-based charge to write or replace one TB.",
+        )
+        custom_write_asset = st.number_input(
+            "Write request cost (USD/asset)", min_value=0.0,
+            key="custom_write_asset",
+            help="Per-file or per-object charge applied when the archive is written or replaced.",
+        )
+        custom_storage_tb_year = st.number_input(
+            "Annual storage cost (USD/TB)", min_value=0.0,
+            key="custom_storage_tb_year",
+            help="Recurring cost to retain one TB for one year.",
+        )
+        custom_retrieval_tb = st.number_input(
+            "Retrieval cost (USD/TB)", min_value=0.0,
+            key="custom_retrieval_tb",
+            help="Capacity-based charge for each TB retrieved.",
+        )
+        custom_retrieval_asset = st.number_input(
+            "Retrieval request cost (USD/asset)", min_value=0.0,
+            key="custom_retrieval_asset",
+            help="Per-file or per-object charge for the expected assets retrieved each year.",
+        )
+        custom_decline = st.number_input(
+            "Annual price decline (%)", min_value=0.0, max_value=99.99,
+            key="custom_decline",
+            help="Annual percentage reduction applied to every custom price.",
+        )
+        custom_replacement = st.number_input(
+            "Replacement interval (years)", min_value=0, max_value=10_000,
+            key="custom_replacement",
+            help="Years between complete rewrites. Use 0 for a service with no replacement writes.",
+        )
+
+    # Phones: the panel carries its own Calculate bar (sticky at the sheet's
+    # bottom) so a cost change commits without closing the panel. Hidden on
+    # desktop, where the header button covers it.
+    if pending:
+        st.markdown(
+            '<span class="pending-marker" aria-hidden="true"></span>',
+            unsafe_allow_html=True,
+        )
+    calculate_panel = st.button(
+        "Calculate",
+        key="calculate_panel",
+        type="primary",
+        width="stretch",
+    )
+
+submitted = calculate_header or calculate_scenario or calculate_panel
 
 if submitted:
     technologies = tuple(
