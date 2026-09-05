@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -94,6 +96,137 @@ def technology_color(technology: str, theme: str = DEFAULT_THEME) -> str:
     return colors.get(technology, colors["Custom storage"])
 
 
+_COMPACT_SUFFIXES = ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K"))
+_LINEAR_STEP_MULTIPLIERS = (1.0, 2.0, 2.5, 5.0, 10.0)
+# Outside this window plain decimals grow unreadably long, so ticks switch
+# to power-of-ten notation instead.
+_PLAIN_NOTATION_FLOOR = 1e-3
+_PLAIN_NOTATION_CEILING = 1e15
+_MAX_TICKS = 8
+
+
+def _compact_number(value: float) -> str:
+    """Axis label without a currency symbol — the axis title carries the unit."""
+    absolute = abs(value)
+    for threshold, suffix in _COMPACT_SUFFIXES:
+        if absolute >= threshold:
+            return f"{value / threshold:g}{suffix}"
+    if value == 0 or absolute >= 1:
+        return f"{value:g}"
+    decimals = -math.floor(math.log10(absolute)) + 2
+    return f"{value:.{decimals}f}".rstrip("0").rstrip(".")
+
+
+def _power_number(value: float) -> str:
+    """`2e-07` reads as 2x10^-7 — one short label instead of a long decimal."""
+    if value == 0:
+        return "0"
+    power = math.floor(math.log10(abs(value)))
+    mantissa = value / 10.0**power
+    if abs(mantissa - 1.0) < 1e-9:
+        return f"10<sup>{power}</sup>"
+    return f"{mantissa:g}x10<sup>{power}</sup>"
+
+
+def _tick_labels(tickvals: list[float]) -> list[str]:
+    """One notation for the whole axis, so labels never mix styles."""
+    positive = [value for value in tickvals if value > 0]
+    if not positive:
+        return [_compact_number(value) for value in tickvals]
+    if min(positive) < _PLAIN_NOTATION_FLOOR or max(positive) >= _PLAIN_NOTATION_CEILING:
+        return [_power_number(value) for value in tickvals]
+    return [_compact_number(value) for value in tickvals]
+
+
+def _log_ticks(minimum: float, maximum: float) -> tuple[list[float], list[float]]:
+    """Decade ticks over the full data span, thinned so a 10-decade axis stays
+    readable. Ticks are laid out from the top down so the highest decade is
+    always labelled."""
+    start = math.floor(math.log10(minimum))
+    end = math.ceil(math.log10(maximum))
+    if end <= start:
+        end = start + 1
+    stride = max(1, math.ceil((end - start) / (_MAX_TICKS - 1)))
+    powers = sorted(power for power in range(end, start - 1, -stride))
+    return [10.0**power for power in powers], [float(start), float(end)]
+
+
+def _linear_ticks(
+    minimum: float, maximum: float, baseline_zero: bool
+) -> tuple[list[float], list[float]]:
+    """Ticks on a 1/2/2.5/5 x 10^k step, with the axis bounds snapped onto that
+    step so the top and bottom edges are labelled."""
+    # Anchor at zero unless the data sits in a narrow band well above it.
+    lower = 0.0 if baseline_zero or minimum <= 0.25 * maximum else minimum
+    span = maximum - lower
+    if span <= 0:
+        return [], []
+    raw_step = span / (_MAX_TICKS - 1)
+    magnitude = 10.0 ** math.floor(math.log10(raw_step))
+    step = next(
+        (
+            multiplier * magnitude
+            for multiplier in _LINEAR_STEP_MULTIPLIERS
+            if raw_step <= multiplier * magnitude
+        ),
+        10.0 * magnitude,
+    )
+    first = math.floor(lower / step)
+    last = math.ceil(maximum / step)
+    tickvals = [step * index for index in range(first, last + 1)]
+    return tickvals, [step * first, step * last]
+
+
+def _trace_y_values(figure: go.Figure) -> list[float]:
+    values: list[float] = []
+    bar_totals: dict[object, float] = {}
+    all_bars = bool(figure.data) and all(trace.type == "bar" for trace in figure.data)
+    for trace in figure.data:
+        y_values = getattr(trace, "y", None)
+        if y_values is None:
+            continue
+        x_values = getattr(trace, "x", None)
+        for index, raw_value in enumerate(y_values):
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(value) or value <= 0:
+                continue
+            values.append(value)
+            if all_bars and x_values is not None:
+                key = x_values[index]
+                bar_totals[key] = bar_totals.get(key, 0.0) + value
+    if bar_totals:
+        values.extend(total for total in bar_totals.values() if total > 0)
+    return values
+
+
+def _apply_cost_axis_format(figure: go.Figure) -> None:
+    """Label the y axis with evenly spaced, unprefixed ticks and pin the axis
+    range to them, so extreme inputs cannot produce Plotly's mixed
+    decade/minor-tick labels or an unlabelled edge."""
+    values = _trace_y_values(figure)
+    if not values:
+        return
+    minimum, maximum = min(values), max(values)
+    if figure.layout.yaxis.type == "log":
+        tickvals, axis_range = _log_ticks(minimum, maximum)
+    else:
+        stacked_bars = bool(figure.data) and all(
+            trace.type == "bar" for trace in figure.data
+        )
+        tickvals, axis_range = _linear_ticks(minimum, maximum, stacked_bars)
+    if not tickvals:
+        return
+    figure.update_yaxes(
+        tickmode="array",
+        tickvals=tickvals,
+        ticktext=_tick_labels(tickvals),
+        range=axis_range,
+    )
+
+
 def _add_terminal_dot(
     figure: go.Figure,
     x: float,
@@ -153,6 +286,7 @@ def lifecycle_chart(
         margin={"l": 12, "r": 12, "t": 88, "b": 12},
         height=460,
     )
+    _apply_cost_axis_format(figure)
     return style_figure(figure, theme)
 
 
@@ -186,6 +320,7 @@ def breakdown_chart(result: SimulationResult, log_scale: bool, theme: str = DEFA
         margin={"l": 12, "r": 12, "t": 88, "b": 12},
         height=430,
     )
+    _apply_cost_axis_format(figure)
     return style_figure(figure, theme)
 
 
@@ -223,6 +358,7 @@ def projection_chart(
         margin={"l": 12, "r": 12, "t": 88, "b": 12},
         height=500,
     )
+    _apply_cost_axis_format(figure)
     return style_figure(figure, theme)
 
 
@@ -310,8 +446,7 @@ def dna_unit_cost_chart(
         height=390,
         showlegend=False,
     )
-    if use_log:
-        figure.update_yaxes(tickformat=".1e")
+    _apply_cost_axis_format(figure)
     return style_figure(figure, theme)
 
 
