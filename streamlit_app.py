@@ -2488,7 +2488,12 @@ with st.sidebar:
                 discount = st.number_input(
                     "Discount rate (%)", min_value=0.0, max_value=99.0,
                     step=0.25, key="discount",
-                    help="Real rate used to discount future payments to the storage start year. Use 0 for undiscounted costs.",
+                    help=(
+                        "Annual real discount rate for present-value results. "
+                        "Use 0% to count every future dollar at face value. "
+                        "Use a higher rate, such as 2-5%, if future costs should count less "
+                        "than costs paid near the start year."
+                    ),
                 )
     
             st.markdown('<div class="sidebar-section">Display</div>', unsafe_allow_html=True)
