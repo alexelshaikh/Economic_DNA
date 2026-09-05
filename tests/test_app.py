@@ -237,6 +237,10 @@ class StreamlitAppTests(unittest.TestCase):
     def test_preset_button_populates_fields_without_committing_until_calculate(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
         preset = PRESET_SCENARIOS["1 PB genomics cold archive"]
+        app.number_input(key="dna_synthesis_cost").set_value(123.0)
+        app.number_input(key="amazon_storage_per_tb_month").set_value(456.0)
+        app.number_input(key="azure_retrieval_per_tb").set_value(789.0)
+        app.number_input(key="tape_media_per_tb").set_value(12.0)
 
         self._click_button(app, "preset_1")
         app.run()
@@ -246,6 +250,10 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertEqual(app.number_input(key="asset_value").value, preset.average_asset_size_mb)
         self.assertEqual(app.number_input(key="retrieval").value, preset.annual_retrieval_percent)
         self.assertEqual(app.number_input(key="horizon").value, preset.horizon_years)
+        self.assertEqual(app.number_input(key="dna_synthesis_cost").value, 123.0)
+        self.assertEqual(app.number_input(key="amazon_storage_per_tb_month").value, 456.0)
+        self.assertEqual(app.number_input(key="azure_retrieval_per_tb").value, 789.0)
+        self.assertEqual(app.number_input(key="tape_media_per_tb").value, 12.0)
 
         # Fields are populated, but the previous (paper baseline) results are
         # still on screen until Calculate is pressed -- same as Reset.
@@ -260,9 +268,12 @@ class StreamlitAppTests(unittest.TestCase):
 
     def test_every_preset_button_is_wired_to_a_known_preset(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        visible_preset_names = [name for name in PRESET_SCENARIOS if name != "Paper baseline"]
         preset_buttons = [button for button in app.button if button.key and button.key.startswith("preset_")]
-        self.assertEqual(len(preset_buttons), len(PRESET_SCENARIOS))
-        self.assertEqual({button.label for button in preset_buttons}, set(PRESET_SCENARIOS))
+        self.assertEqual(len(preset_buttons), len(visible_preset_names))
+        self.assertEqual({button.label.splitlines()[0] for button in preset_buttons}, set(visible_preset_names))
+        self.assertTrue(all(" | " in button.label for button in preset_buttons))
+        self.assertNotIn("Paper baseline", {button.label.splitlines()[0] for button in preset_buttons})
 
     def test_order_of_magnitude_steppers_scale_the_synthesis_cost_field(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()

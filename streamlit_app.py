@@ -258,14 +258,21 @@ st.markdown(
     section[data-testid="stSidebar"] > div { width: 460px !important; }
     section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
         overflow-x: hidden;
-        overflow-y: hidden;
-        padding: 1.375rem 0.7rem 0 1.2rem;
+        overflow-y: auto;
+        padding: 0.55rem 0.7rem 1.5rem 1.2rem;
     }
     section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+        height: 2.15rem !important;
+        min-height: 2.15rem !important;
+        padding: 0.15rem 0 0 !important;
         margin-bottom: 0;
     }
+    section[data-testid="stSidebar"] [data-testid="stLogoSpacer"] {
+        height: 1.9rem !important;
+        min-height: 1.9rem !important;
+    }
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        padding-bottom: 0;
+        padding-bottom: 1.5rem;
     }
     .sidebar-kicker, .page-kicker, .workspace-kicker, .export-label {
         color: var(--accent);
@@ -369,15 +376,10 @@ st.markdown(
         border-color: var(--accent-strong);
         color: #ffffff;
     }
-    /* Two-column sidebar: the left column holds all inputs and scrolls on its
-       own; the right column holds only the Calculate button. The sidebar's
-       own scroll container is disabled (position: sticky is unreliable inside
-       it in this DOM: the absolutely-positioned flex app container breaks it),
-       so instead the input column becomes the scroller and the button rail
-       sits beside it as a fixed sibling that never moves. The in-flow sidebar
-       header occupies the top 82px (22px content padding + 60px header in
-       Streamlit 1.63), which is reserved so nothing overlaps the collapse
-       control. */
+    /* Two-column sidebar: the left column holds all inputs and the right
+       column holds only the Calculate button on narrow layouts. On desktop
+       the rail is hidden and the sidebar itself scrolls, so preset/reset
+       controls above the form cannot reduce the visible bottom of the form. */
     section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) {
         align-items: stretch;
         gap: 0.7rem !important;
@@ -387,8 +389,8 @@ st.markdown(
        stretching each widget row to the full visible height. */
     section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
     > [data-testid="stColumn"]:first-child {
-        height: calc(100vh - 82px);
-        overflow-y: auto;
+        height: auto;
+        overflow-y: visible;
         overscroll-behavior-y: contain;
         padding: 0 0 1.5rem;
         scrollbar-gutter: stable;
@@ -543,10 +545,16 @@ st.markdown(
     section[data-testid="stSidebar"] .st-key-scenario-action-rail {
         display: none;
     }
-    /* Header Calculate: pinned to the top bar, centered in the space between
-       the left controls and the theme toggle / status widget on the right,
-       with downward arrows flanking the label. It pulses while changes are
-       pending. */
+    .st-key-calculate-anchor,
+    .st-key-copy-link-anchor,
+    .st-key-global-reset-btn {
+        --header-calc-width: clamp(18rem, 34vw, 30rem);
+        --header-calc-half: clamp(9rem, 17vw, 15rem);
+        --header-side-width: 10.75rem;
+        --header-action-gap: 0.65rem;
+    }
+    /* Header Calculate: pinned to the top bar with the copy-link action
+       beside it. It pulses while changes are pending. */
     .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button {
         background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
         border: none;
@@ -562,7 +570,7 @@ st.markdown(
         position: fixed;
         top: 0.7rem;
         transform: translateX(-50%) translateZ(0);
-        width: min(44rem, calc(100vw - 26rem)) !important;
+        width: var(--header-calc-width) !important;
         z-index: 999990;
         /* Own compositing layer: reruns repaint the content below, and a
            promoted layer keeps the button from blinking along with it. */
@@ -594,6 +602,33 @@ st.markdown(
     html:has(.theme-marker.theme-dark) .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button {
         background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
         color: var(--action-text);
+    }
+    .st-key-copy-link-anchor .stButton button {
+        background: var(--surface);
+        border: 1px solid var(--line-strong);
+        border-radius: 12px;
+        box-shadow: var(--shadow-sm);
+        color: var(--download-text);
+        font-size: 0.86rem;
+        font-weight: 700;
+        right: calc(50% + var(--header-calc-half) + var(--header-action-gap));
+        min-height: 2.6rem;
+        padding: 0 0.85rem;
+        position: fixed;
+        top: 0.7rem;
+        width: var(--header-side-width) !important;
+        z-index: 999990;
+    }
+    .st-key-copy-link-anchor .stButton button:hover {
+        background: var(--surface-subtle);
+        border-color: var(--accent);
+        box-shadow: var(--shadow-md);
+        color: var(--accent-strong);
+        transform: translateY(-1px);
+    }
+    .st-key-copy-link-anchor .stButton button:active {
+        box-shadow: var(--shadow-sm);
+        transform: translateY(1px) scale(0.99);
     }
     /* Radio tab text: the option's inner text div is compiled from the light
        theme (dark ink) and ignores the label color — inherit it instead. */
@@ -901,6 +936,65 @@ st.markdown(
     .st-key-cost-panel [data-testid="stTextInput"] {
         margin-bottom: 0.18rem;
     }
+    .st-key-sidebar-presets .stButton button {
+        align-items: flex-start;
+        background: var(--surface) !important;
+        border: 1px solid var(--accent) !important;
+        border-radius: 8px;
+        box-shadow: var(--shadow-sm), inset 0 -1px 0 rgba(24, 33, 31, 0.08);
+        color: var(--ink);
+        cursor: pointer;
+        justify-content: flex-start;
+        min-height: 3.75rem;
+        overflow: hidden;
+        padding: 0.58rem 3.2rem 0.58rem 0.85rem;
+        position: relative;
+        text-align: left;
+        transition: background 160ms var(--ease), border-color 160ms var(--ease),
+            box-shadow 160ms var(--ease), transform 160ms var(--ease);
+        white-space: normal;
+        width: 100%;
+    }
+    .st-key-sidebar-presets .stButton button::before {
+        background: var(--accent);
+        content: "";
+        inset: 0 auto 0 0;
+        position: absolute;
+        width: 4px;
+    }
+    .st-key-sidebar-presets .stButton button::after {
+        background: var(--accent);
+        border-radius: 999px;
+        color: var(--action-text);
+        content: "Load";
+        font-size: 0.68rem;
+        font-weight: 800;
+        line-height: 1;
+        padding: 0.34rem 0.48rem;
+        position: absolute;
+        right: 0.62rem;
+        top: 0.66rem;
+        text-transform: uppercase;
+    }
+    .st-key-sidebar-presets .stButton button:hover {
+        background: var(--accent-soft) !important;
+        border-color: var(--accent);
+        box-shadow: var(--shadow-md);
+        color: var(--accent-strong);
+        transform: translateY(-1px);
+    }
+    .st-key-sidebar-presets .stButton button:active {
+        box-shadow: var(--shadow-sm);
+        transform: translateY(0);
+    }
+    .st-key-sidebar-presets .stButton button p {
+        color: inherit;
+        font-size: 0.82rem;
+        font-weight: 700;
+        line-height: 1.32;
+        margin: 0;
+        white-space: pre-line;
+    }
     /* Reset buttons synchronize Streamlit's widget state without updating the
        committed scenario or refreshing charts. */
     .st-key-sidebar-reset-btn .stButton button {
@@ -924,25 +1018,31 @@ st.markdown(
     .st-key-global-reset-btn .stButton button {
         background: var(--surface);
         border: 1px solid var(--line-strong);
-        border-radius: 8px;
+        border-radius: 12px;
         box-shadow: var(--shadow-sm);
         color: var(--download-text);
         cursor: pointer;
-        font-size: 0.88rem;
-        font-weight: 650;
-        left: calc(50% + min(22rem, calc((100vw - 26rem) / 2)) + 0.75rem);
-        min-height: 2.35rem;
-        padding: 0 1rem;
+        font-size: 0.86rem;
+        font-weight: 700;
+        left: calc(50% + var(--header-calc-half) + var(--header-action-gap));
+        min-height: 2.6rem;
+        padding: 0 0.85rem;
         position: fixed;
-        top: 0.82rem;
+        top: 0.7rem;
         white-space: nowrap;
-        width: max-content !important;
+        width: var(--header-side-width) !important;
         z-index: 999990;
     }
     .st-key-global-reset-btn .stButton button:hover {
         background: var(--surface-subtle);
         border-color: var(--accent);
+        box-shadow: var(--shadow-md);
         color: var(--accent-strong);
+        transform: translateY(-1px);
+    }
+    .st-key-global-reset-btn .stButton button:active {
+        box-shadow: var(--shadow-sm);
+        transform: translateY(1px) scale(0.99);
     }
     /* Per-model resets sit inside the active cost panel and restore only that
        model's editable assumptions. */
@@ -1015,9 +1115,6 @@ st.markdown(
         padding-right: 0.75rem;
     }
     .model-item:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
-    .st-key-copy-link-anchor { margin: -0.9rem 0 1.25rem; }
-    .st-key-copy-link-anchor .stButton button { font-size: 0.8rem; padding: 0.3rem 0.75rem; }
-
     .scenario-bar {
         align-items: center;
         background: var(--surface-subtle);
@@ -1209,20 +1306,13 @@ st.markdown(
     }
 
     @media (max-width: 1200px) {
-        .st-key-global-reset-btn .stButton button {
-            font-size: 0;
-            left: auto;
-            min-height: 2.35rem;
-            padding: 0;
-            right: calc(50% + min(22rem, calc((100vw - 26rem) / 2)) + 0.75rem);
-            width: 2.35rem !important;
-        }
-        .st-key-global-reset-btn .stButton button::before {
-            content: "\\21ba";
-            display: block;
-            font-family: "Segoe UI Symbol", sans-serif;
-            font-size: 1rem;
-            line-height: 1;
+        .st-key-calculate-anchor,
+        .st-key-copy-link-anchor,
+        .st-key-global-reset-btn {
+            --header-calc-width: clamp(15rem, 35vw, 24rem);
+            --header-calc-half: clamp(7.5rem, 17.5vw, 12rem);
+            --header-side-width: 8.75rem;
+            --header-action-gap: 0.5rem;
         }
     }
 
@@ -1283,12 +1373,15 @@ st.markdown(
         section[data-testid="stSidebar"] {
             max-width: none !important;
         }
+        section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+            overflow-y: auto;
+            padding-bottom: 5rem;
+        }
         section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) {
             flex: 0 0 auto !important;
             flex-direction: column !important;
             flex-wrap: nowrap !important;
-            height: calc(100vh - 82px);
-            height: calc(100dvh - 82px);
+            height: auto;
             gap: 0.6rem !important;
         }
         section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
@@ -1296,7 +1389,7 @@ st.markdown(
             flex: 1 1 auto !important;
             height: auto !important;
             min-height: 0;
-            overflow-y: auto;
+            overflow-y: visible;
             padding: 0 0 1rem;
         }
         section[data-testid="stSidebar"] .st-key-scenario-action-rail {
@@ -1497,7 +1590,8 @@ st.markdown(
             writing-mode: horizontal-tb;
             transform: none;
         }
-        .st-key-calculate-anchor {
+        .st-key-calculate-anchor,
+        .st-key-copy-link-anchor {
             display: none;
         }
         .st-key-global-reset-btn {
@@ -1743,6 +1837,19 @@ SIDEBAR_WIDGET_KEYS = [
     "projection_end",
     "log_scale",
 ]
+
+
+PRESET_WIDGET_KEYS = [
+    "archive_value",
+    "archive_unit",
+    "asset_value",
+    "asset_unit",
+    "retrieval",
+    "horizon",
+]
+
+
+PRESET_BUTTON_NAMES = [name for name in PRESET_SCENARIOS if name != "Paper baseline"]
 
 
 WIDGET_KEYS = [
@@ -2258,12 +2365,22 @@ def _reset_widget_keys(widget_keys: list[str]) -> None:
 def _apply_preset(preset_name: str) -> None:
     # Same mechanism as _reset_widget_keys: an on_click callback runs before
     # the next rerun re-instantiates the widgets, so writing session_state
-    # here is safe even though these are form widgets. Reads query params
-    # directly (rather than closing over the outer `query`) so it reflects
-    # the current URL even though callbacks bind to the run that created them.
+    # here is safe even though these are form widgets. Presets describe the
+    # workload profile only; cost-model assumptions stay exactly as edited.
     preset_widgets = _widget_state_from_scenario(PRESET_SCENARIOS[preset_name], _query_mapping())
-    for widget_key, value in preset_widgets.items():
+    for widget_key in PRESET_WIDGET_KEYS:
+        value = preset_widgets[widget_key]
         st.session_state[widget_key] = value
+
+
+def _preset_button_label(preset_name: str) -> str:
+    scenario = PRESET_SCENARIOS[preset_name]
+    archive_value, archive_unit, asset_value, asset_unit = _display_units(scenario)
+    archive = f"{archive_value:g} {archive_unit}"
+    asset = f"{asset_value:g} {asset_unit}/asset"
+    retrieval = f"{scenario.annual_retrieval_percent:g}%/yr"
+    retention = f"{scenario.horizon_years:g} yrs"
+    return f"{preset_name}\n{archive} | {asset} | {retrieval} | {retention}"
 
 
 for widget_key, default_value in initial_widgets.items():
@@ -2280,17 +2397,16 @@ st.session_state.setdefault("committed_widgets", dict(initial_widgets))
 # and header Calculate join it via the main dg's form data below.
 with st.sidebar:
     with st.container(key="sidebar-presets"):
-        st.markdown('<div class="sidebar-section">Start from a preset</div>', unsafe_allow_html=True)
-        preset_names = list(PRESET_SCENARIOS)
-        preset_columns = st.columns(2)
-        for index, preset_name in enumerate(preset_names):
-            preset_columns[index % 2].button(
-                preset_name,
+        st.markdown('<div class="sidebar-section">Load Workload Presets</div>', unsafe_allow_html=True)
+        for index, preset_name in enumerate(PRESET_SCENARIOS):
+            if preset_name not in PRESET_BUTTON_NAMES:
+                continue
+            st.button(
+                _preset_button_label(preset_name),
                 key=f"preset_{index}",
                 on_click=_apply_preset,
                 args=(preset_name,),
                 width="stretch",
-                help=f"Load the “{preset_name}” scenario into the fields below, then press Calculate.",
             )
     with st.container(key="sidebar-reset-btn"):
         st.button(
@@ -2444,7 +2560,7 @@ with st.sidebar:
 # (Hidden on phones, where the sheet bar and the panel bar cover the flows.)
 with st.container(key="global-reset-btn"):
     st.button(
-        "Reset all inputs to paper baseline",
+        "Reset all",
         key="global_reset",
         on_click=_reset_widget_keys,
         args=(WIDGET_KEYS,),
@@ -2502,6 +2618,16 @@ with st.container(key="calculate-anchor"):
         type="primary",
         width="stretch",
     )
+
+_main_dg._form_data = None
+with st.container(key="copy-link-anchor"):
+    st.button(
+        "Copy link",
+        key="copy_scenario_link",
+        icon=":material/link:",
+    )
+_bind_copy_link_button("copy_scenario_link")
+_main_dg._form_data = _FormData("scenario_form")
 
 # The tabs are a Streamlit radio: the frontend manages its checked state
 # instantly (no rerun \u2014 it is a form widget), the radio group enforces
@@ -2852,15 +2978,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-with st.container(key="copy-link-anchor"):
-    st.button(
-        "Copy link to this scenario",
-        key="copy_scenario_link",
-        icon=":material/link:",
-        help="Copies this page's address, which already encodes every input from your last Calculate.",
-    )
-_bind_copy_link_button("copy_scenario_link")
-
 totals = result.totals.sort_values(value_column)
 cheapest = totals.iloc[0]
 cheapest_name = str(cheapest["technology"])
