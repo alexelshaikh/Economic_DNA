@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-from io import BytesIO
-
-import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.graph_objects as go
-from matplotlib.ticker import StrMethodFormatter
 
 from .simulation import COMPONENTS, SimulationResult
 
@@ -99,7 +95,13 @@ def technology_color(technology: str, theme: str = DEFAULT_THEME) -> str:
 
 
 def _add_terminal_dot(
-    figure: go.Figure, x: float, y: float, color: str, surface_color: str, name: str
+    figure: go.Figure,
+    x: float,
+    y: float,
+    color: str,
+    surface_color: str,
+    name: str,
+    legendgroup: str | None = None,
 ) -> None:
     """Small ring-marked dot on the line's last point — a quiet end-of-line
     accent, hidden from the legend and the unified hover."""
@@ -109,6 +111,7 @@ def _add_terminal_dot(
             y=[y],
             mode="markers",
             name=name,
+            legendgroup=legendgroup,
             showlegend=False,
             hoverinfo="skip",
             marker={"color": color, "size": 8, "line": {"color": surface_color, "width": 2}},
@@ -130,19 +133,22 @@ def lifecycle_chart(
                 x=data["year"],
                 y=data[value],
                 name=technology,
+                legendgroup=technology,
                 mode="lines",
                 line={"color": color, "width": 3},
                 hovertemplate="%{x}<br>%{y:$,.3s}<extra>%{fullData.name}</extra>",
             )
         )
         last = data.iloc[-1]
-        _add_terminal_dot(figure, last["year"], last[value], color, surface, technology)
+        _add_terminal_dot(
+            figure, last["year"], last[value], color, surface, technology, technology
+        )
     figure.update_layout(
         title="Cumulative lifecycle cost",
         xaxis_title="Calendar year",
         yaxis_title="Present value (USD)" if use_present_value else "Cumulative cost (USD)",
         yaxis_type="log" if log_scale else "linear",
-        legend={"orientation": "h", "y": 1.12, "x": 0},
+        legend={"orientation": "h", "y": 1.12, "x": 0, "groupclick": "togglegroup"},
         hovermode="x unified",
         margin={"l": 12, "r": 12, "t": 88, "b": 12},
         height=460,
@@ -175,7 +181,7 @@ def breakdown_chart(result: SimulationResult, log_scale: bool, theme: str = DEFA
         yaxis_type="log" if log_scale else "linear",
         barmode="stack",
         bargap=0.18,
-        legend={"orientation": "h", "y": 1.12, "x": 0},
+        legend={"orientation": "h", "y": 1.12, "x": 0, "groupclick": "togglegroup"},
         hovermode="x unified",
         margin={"l": 12, "r": 12, "t": 88, "b": 12},
         height=430,
@@ -197,13 +203,16 @@ def projection_chart(
                 x=data["start_year"],
                 y=data[value],
                 name=technology,
+                legendgroup=technology,
                 mode="lines",
                 line={"color": color, "width": 3},
                 hovertemplate="Start %{x}<br>%{y:$,.3s}<extra>%{fullData.name}</extra>",
             )
         )
         last = data.iloc[-1]
-        _add_terminal_dot(figure, last["start_year"], last[value], color, surface, technology)
+        _add_terminal_dot(
+            figure, last["start_year"], last[value], color, surface, technology, technology
+        )
     figure.update_layout(
         title="Lifecycle cost by storage start year",
         xaxis_title="Storage start year",
@@ -306,104 +315,34 @@ def dna_unit_cost_chart(
     return style_figure(figure, theme)
 
 
-def _figure_exports(fig: plt.Figure, palette: dict) -> dict[str, bytes]:
-    exports: dict[str, bytes] = {}
-    for file_format in ("png", "svg"):
-        output = BytesIO()
-        fig.savefig(
-            output,
+def plotly_image_exports(
+    figure: go.Figure,
+    *,
+    width: int = 1200,
+    height: int | None = None,
+    scale: int = 2,
+) -> dict[str, bytes]:
+    """Export the same Plotly figure object that is rendered in the app."""
+    export_height = height or int(figure.layout.height or 500)
+    return {
+        file_format: figure.to_image(
             format=file_format,
-            dpi=220,
-            bbox_inches="tight",
-            facecolor=palette["export"]["facecolor"],
+            width=width,
+            height=export_height,
+            scale=scale,
         )
-        exports[file_format] = output.getvalue()
-    plt.close(fig)
-    return exports
-
-
-def _finish_export_figure(
-    fig: plt.Figure, ax: plt.Axes, metadata: dict[str, str], palette: dict
-) -> None:
-    colors = palette["export"]
-    ax.grid(axis="y", color=colors["grid_color"], linewidth=0.8)
-    ax.spines[["top", "right"]].set_visible(False)
-    ax.spines[["left", "bottom"]].set_color(colors["grid_color"])
-    ax.tick_params(colors=colors["text_color"])
-    ax.xaxis.label.set_color(colors["text_color"])
-    ax.yaxis.label.set_color(colors["text_color"])
-    ax.title.set_color(colors["title_color"])
-    legend = ax.get_legend()
-    if legend:
-        for text in legend.get_texts():
-            text.set_color(colors["text_color"])
-    if ax.get_yscale() == "log":
-        # Avoid MathText tick labels, which fail in some Streamlit/Matplotlib renderers.
-        ax.yaxis.set_major_formatter(StrMethodFormatter("{x:.0e}"))
-    fig.text(
-        0.01,
-        0.01,
-        f"Economic DNA model v{metadata['model_version']} | {metadata['currency']} | "
-        f"{metadata['disclaimer']}",
-        fontsize=8,
-        color=colors["text_color"],
-    )
-    fig.patch.set_facecolor(colors["facecolor"])
-    ax.set_facecolor(colors["facecolor"])
-    fig.tight_layout(rect=(0, 0.04, 1, 1))
+        for file_format in ("png", "svg")
+    }
 
 
 def lifecycle_exports(
     result: SimulationResult, use_present_value: bool, log_scale: bool, theme: str = DEFAULT_THEME
 ) -> dict[str, bytes]:
-    palette = palette_for(theme)
-    value = "cumulative_present_value_usd" if use_present_value else "cumulative_cost_usd"
-    fig, ax = plt.subplots(figsize=(10, 5.6))
-    for technology in result.totals["technology"]:
-        data = result.yearly[result.yearly["technology"] == technology]
-        ax.plot(
-            data["year"],
-            data[value],
-            label=technology,
-            color=technology_color(technology, theme),
-            linewidth=3,
-        )
-    if log_scale:
-        ax.set_yscale("log")
-    ax.set_title("Cumulative lifecycle cost", loc="left", fontweight="bold")
-    ax.set_xlabel("Calendar year")
-    ax.set_ylabel("Present value (USD)" if use_present_value else "Cumulative cost (USD)")
-    ax.legend(frameon=False, ncol=2)
-    _finish_export_figure(fig, ax, result.metadata, palette)
-    return _figure_exports(fig, palette)
+    return plotly_image_exports(lifecycle_chart(result, use_present_value, log_scale, theme))
 
 
 def breakdown_exports(result: SimulationResult, log_scale: bool, theme: str = DEFAULT_THEME) -> dict[str, bytes]:
-    palette = palette_for(theme)
-    component_colors = palette["component_colors"]
-    totals = result.totals
-    fig, ax = plt.subplots(figsize=(10, 5.4))
-    bottom = pd.Series(0.0, index=totals.index)
-    for component in COMPONENTS:
-        ax.bar(
-            totals["technology"],
-            totals[component],
-            bottom=bottom,
-            label=COMPONENT_LABELS[component],
-            color=component_colors[component],
-            # Surface-colored borders give the same segment gaps as the app chart.
-            edgecolor=palette["export"]["facecolor"],
-            linewidth=1.5,
-        )
-        bottom += totals[component]
-    if log_scale:
-        ax.set_yscale("log")
-    ax.set_title("Undiscounted cost components", loc="left", fontweight="bold")
-    ax.set_ylabel("Lifecycle cost (USD)")
-    ax.tick_params(axis="x", rotation=12)
-    ax.legend(frameon=False, ncol=3)
-    _finish_export_figure(fig, ax, result.metadata, palette)
-    return _figure_exports(fig, palette)
+    return plotly_image_exports(breakdown_chart(result, log_scale, theme))
 
 
 def projection_exports(
@@ -413,26 +352,7 @@ def projection_exports(
     metadata: dict[str, str],
     theme: str = DEFAULT_THEME,
 ) -> dict[str, bytes]:
-    palette = palette_for(theme)
-    value = "present_value_usd" if use_present_value else "total_cost_usd"
-    fig, ax = plt.subplots(figsize=(10, 5.8))
-    for technology in projection["technology"].drop_duplicates():
-        data = projection[projection["technology"] == technology]
-        ax.plot(
-            data["start_year"],
-            data[value],
-            label=technology,
-            color=technology_color(technology, theme),
-            linewidth=3,
-        )
-    if log_scale:
-        ax.set_yscale("log")
-    ax.set_title("Lifecycle cost by storage start year", loc="left", fontweight="bold")
-    ax.set_xlabel("Storage start year")
-    ax.set_ylabel("Present value (USD)" if use_present_value else "Lifecycle cost (USD)")
-    ax.legend(frameon=False, ncol=2)
-    _finish_export_figure(fig, ax, metadata, palette)
-    return _figure_exports(fig, palette)
+    return plotly_image_exports(projection_chart(projection, use_present_value, log_scale, theme))
 
 
 def dna_unit_cost_exports(
@@ -444,18 +364,9 @@ def dna_unit_cost_exports(
     metadata: dict[str, str],
     theme: str = DEFAULT_THEME,
 ) -> dict[str, bytes]:
-    palette = palette_for(theme)
-    fig, ax = plt.subplots(figsize=(7.2, 5.2))
-    ax.plot(costs["year"], costs[value_column], color=color, linewidth=3)
-    if log_scale and bool((costs[value_column] > 0).any()):
-        ax.set_yscale("log")
-    else:
-        ax.fill_between(costs["year"], costs[value_column], color=color, alpha=0.12)
-    ax.set_title(title, loc="left", fontweight="bold")
-    ax.set_xlabel("Calendar year")
-    ax.set_ylabel("USD per MB")
-    _finish_export_figure(fig, ax, metadata, palette)
-    return _figure_exports(fig, palette)
+    return plotly_image_exports(
+        dna_unit_cost_chart(costs, value_column, title, color, log_scale, theme)
+    )
 
 
 def lifecycle_export(

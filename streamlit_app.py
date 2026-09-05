@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import html
+import json
 import pandas as pd
+import plotly.io as pio
 import streamlit as st
 
 # Form context for the main-area widgets (see the comment before the cost
@@ -18,15 +20,12 @@ from economic_dna import (
 )
 from economic_dna.assumptions import load_assumptions
 from economic_dna.visualization import (
-    breakdown_exports,
     breakdown_chart,
     dna_unit_cost_chart,
-    dna_unit_cost_exports,
     lifecycle_chart,
-    lifecycle_exports,
     palette_for,
+    plotly_image_exports,
     projection_chart,
-    projection_exports,
 )
 
 
@@ -1926,6 +1925,7 @@ def _chart_downloads(
     csv_data: bytes,
     filename_base: str,
     image_exports: dict[str, bytes],
+    chart_key: str,
 ) -> None:
     st.markdown('<div class="export-label">Export chart</div>', unsafe_allow_html=True)
     columns = st.columns(3)
@@ -1959,6 +1959,77 @@ def _chart_downloads(
         width="stretch",
         help="Download this graph as an editable vector image.",
     )
+    _bind_live_plotly_image_downloads(key, chart_key, filename_base)
+
+
+def _bind_live_plotly_image_downloads(key: str, chart_key: str, filename_base: str) -> None:
+    config_json = json.dumps(
+        {
+            "chartKey": chart_key,
+            "filename": filename_base,
+            "buttons": {
+                "png": f"download_{key}_png",
+                "svg": f"download_{key}_svg",
+            },
+        }
+    )
+    st.iframe(
+        f"""
+        <script>
+        (() => {{
+          const config = {config_json};
+          const findByKey = (key) => parent.document.querySelector(`.st-key-${{key}}`);
+          const findGraph = () => {{
+            const root = findByKey(config.chartKey);
+            return root ? root.querySelector(".js-plotly-plot") : null;
+          }};
+          const plotlyApi = () => parent.Plotly || parent.document.defaultView.Plotly;
+          const bind = () => {{
+            const graph = findGraph();
+            const Plotly = plotlyApi();
+            let bound = 0;
+            for (const [format, buttonKey] of Object.entries(config.buttons)) {{
+              const buttonRoot = findByKey(buttonKey);
+              const button = buttonRoot ? buttonRoot.querySelector("button") : null;
+              if (!button || button.dataset.livePlotlyExport === config.chartKey + format) {{
+                if (button) bound += 1;
+                continue;
+              }}
+              button.dataset.livePlotlyExport = config.chartKey + format;
+              button.addEventListener("click", (event) => {{
+                const liveGraph = findGraph();
+                const livePlotly = plotlyApi();
+                if (!liveGraph || !livePlotly || !livePlotly.downloadImage) return;
+                event.preventDefault();
+                event.stopPropagation();
+                event.stopImmediatePropagation();
+                const bounds = liveGraph.getBoundingClientRect();
+                const width = Math.max(320, Math.round(bounds.width || liveGraph._fullLayout?.width || 1200));
+                const height = Math.max(240, Math.round(bounds.height || liveGraph._fullLayout?.height || 500));
+                livePlotly.downloadImage(liveGraph, {{
+                  format,
+                  filename: config.filename,
+                  width,
+                  height,
+                  scale: format === "png" ? 2 : 1,
+                }});
+              }}, true);
+              bound += 1;
+            }}
+            return Boolean(graph && Plotly && Plotly.downloadImage && bound === 2);
+          }};
+          if (bind()) return;
+          let tries = 0;
+          const timer = setInterval(() => {{
+            tries += 1;
+            if (bind() || tries > 100) clearInterval(timer);
+          }}, 100);
+        }})();
+        </script>
+        """,
+        width=1,
+        height=1,
+    )
 
 
 def _plot_config(filename: str) -> dict:
@@ -1981,6 +2052,18 @@ def _cached_projection(scenario: Scenario, final_year: int) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def _cached_dna_costs(scenario: Scenario, final_year: int) -> pd.DataFrame:
     return simulate_dna_unit_costs(scenario, final_year)
+
+
+@st.cache_data(show_spinner=False)
+def _cached_plotly_image_exports(figure_json: str, height: int) -> dict[str, bytes]:
+    return plotly_image_exports(pio.from_json(figure_json), height=height)
+
+
+def _image_exports_for(figure) -> dict[str, bytes]:
+    return _cached_plotly_image_exports(
+        figure.to_json(),
+        int(figure.layout.height or 500),
+    )
 
 
 initial = _initial_scenario()
@@ -2580,15 +2663,16 @@ with overview_tab:
     lifecycle_figure = lifecycle_chart(result, use_present_value, log_scale, theme=theme)
     st.plotly_chart(
         lifecycle_figure,
+        key="chart_lifecycle",
         width="stretch",
         config=_plot_config("dna-storage-lifecycle"),
     )
-    lifecycle_files = lifecycle_exports(result, use_present_value, log_scale, theme=theme)
     _chart_downloads(
         "lifecycle",
         result.yearly.to_csv(index=False).encode("utf-8"),
         "dna-storage-lifecycle",
-        lifecycle_files,
+        _image_exports_for(lifecycle_figure),
+        "chart_lifecycle",
     )
     st.markdown(
         """
@@ -2602,6 +2686,7 @@ with overview_tab:
     breakdown_figure = breakdown_chart(result, log_scale, theme=theme)
     st.plotly_chart(
         breakdown_figure,
+        key="chart_breakdown",
         width="stretch",
         config=_plot_config("dna-storage-cost-components"),
     )
@@ -2612,7 +2697,8 @@ with overview_tab:
         "breakdown",
         result.totals[breakdown_columns].to_csv(index=False).encode("utf-8"),
         "dna-storage-cost-components",
-        breakdown_exports(result, log_scale, theme=theme),
+        _image_exports_for(breakdown_figure),
+        "chart_breakdown",
     )
 
 with outlook_tab:
@@ -2625,6 +2711,7 @@ with outlook_tab:
     projection_figure = projection_chart(projection, use_present_value, log_scale, theme=theme)
     st.plotly_chart(
         projection_figure,
+        key="chart_projection",
         width="stretch",
         config=_plot_config("dna-storage-start-year-outlook"),
     )
@@ -2632,7 +2719,8 @@ with outlook_tab:
         "projection",
         projection.to_csv(index=False).encode("utf-8"),
         "dna-storage-start-year-outlook",
-        projection_exports(projection, use_present_value, log_scale, result.metadata, theme=theme),
+        _image_exports_for(projection_figure),
+        "chart_projection",
     )
     st.markdown(
         """
@@ -2669,15 +2757,17 @@ with dna_cost_tab:
     chart_columns = st.columns(2)
     with chart_columns[0]:
         synthesis_title = "DNA synthesis cost trajectory"
+        synthesis_figure = dna_unit_cost_chart(
+            dna_costs,
+            "synthesis_cost_usd_per_mb",
+            synthesis_title,
+            chart_palette["unit_cost_colors"]["synthesis"],
+            log_scale,
+            theme=theme,
+        )
         st.plotly_chart(
-            dna_unit_cost_chart(
-                dna_costs,
-                "synthesis_cost_usd_per_mb",
-                synthesis_title,
-                chart_palette["unit_cost_colors"]["synthesis"],
-                log_scale,
-                theme=theme,
-            ),
+            synthesis_figure,
+            key="chart_dna_synthesis",
             width="stretch",
             config=_plot_config("dna-synthesis-cost-trajectory"),
         )
@@ -2690,27 +2780,22 @@ with dna_cost_tab:
             "dna_synthesis",
             synthesis_data.to_csv(index=False).encode("utf-8"),
             "dna-synthesis-cost-trajectory",
-            dna_unit_cost_exports(
-                dna_costs,
-                "synthesis_cost_usd_per_mb",
-                synthesis_title,
-                chart_palette["unit_cost_colors"]["synthesis"],
-                log_scale,
-                result.metadata,
-                theme=theme,
-            ),
+            _image_exports_for(synthesis_figure),
+            "chart_dna_synthesis",
         )
     with chart_columns[1]:
         sequencing_title = "DNA sequencing cost trajectory"
+        sequencing_figure = dna_unit_cost_chart(
+            dna_costs,
+            "sequencing_cost_usd_per_mb",
+            sequencing_title,
+            chart_palette["unit_cost_colors"]["sequencing"],
+            log_scale,
+            theme=theme,
+        )
         st.plotly_chart(
-            dna_unit_cost_chart(
-                dna_costs,
-                "sequencing_cost_usd_per_mb",
-                sequencing_title,
-                chart_palette["unit_cost_colors"]["sequencing"],
-                log_scale,
-                theme=theme,
-            ),
+            sequencing_figure,
+            key="chart_dna_sequencing",
             width="stretch",
             config=_plot_config("dna-sequencing-cost-trajectory"),
         )
@@ -2723,15 +2808,8 @@ with dna_cost_tab:
             "dna_sequencing",
             sequencing_data.to_csv(index=False).encode("utf-8"),
             "dna-sequencing-cost-trajectory",
-            dna_unit_cost_exports(
-                dna_costs,
-                "sequencing_cost_usd_per_mb",
-                sequencing_title,
-                chart_palette["unit_cost_colors"]["sequencing"],
-                log_scale,
-                result.metadata,
-                theme=theme,
-            ),
+            _image_exports_for(sequencing_figure),
+            "chart_dna_sequencing",
         )
 
 with assumptions_tab:
