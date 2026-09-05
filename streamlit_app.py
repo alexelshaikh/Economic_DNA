@@ -2117,9 +2117,16 @@ def _bind_copy_link_button(key: str) -> None:
         (() => {{
           const bind = () => {{
             const root = parent.document.querySelector(".st-key-{key}");
-            const buttons = root ? root.querySelectorAll("button") : [];
-            // Streamlit renders a hidden 0x0 tooltip-wrapper copy first.
-            const button = buttons.length ? buttons[buttons.length - 1] : null;
+            const buttons = root ? Array.from(root.querySelectorAll("button")) : [];
+            // Streamlit can render a hidden 0x0 duplicate around tooltip state;
+            // bind the button the user can actually click.
+            const button = buttons.find((candidate) => {{
+              const rect = candidate.getBoundingClientRect();
+              const style = parent.getComputedStyle(candidate);
+              return rect.width > 0 && rect.height > 0
+                && style.display !== "none"
+                && style.visibility !== "hidden";
+            }}) || null;
             if (!button || button.dataset.copyLinkBound) return Boolean(button);
             button.dataset.copyLinkBound = "1";
             const original = button.innerHTML;
