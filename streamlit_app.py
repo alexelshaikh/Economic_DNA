@@ -791,17 +791,19 @@ st.markdown(
         transition-delay: 0s;
         visibility: visible;
     }
-    .st-key-cost-panel [class*="st-key-cost_model_"] { display: none; }
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost_model_dna { display: block; }
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost_model_amazon { display: block; }
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost_model_azure { display: block; }
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost_model_tape { display: block; }
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost_model_custom { display: block; }
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost_model_dna,
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost_model_amazon,
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost_model_azure,
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost_model_tape,
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost_model_custom {
+    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_dna),
+    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_amazon),
+    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_azure),
+    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_tape),
+    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_custom) {
+        display: none;
+    }
+    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_dna),
+    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_amazon),
+    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_azure),
+    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_tape),
+    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_custom) {
+        display: block;
         animation: cost-model-in 210ms var(--ease) both;
     }
     @keyframes cost-model-in {
