@@ -1,5 +1,5 @@
 metadata:
-  model_version: "1.2.0"
+  model_version: "1.4.0"
   last_reviewed: "2025-07-01"
   currency: "constant 2025 USD"
   horizon_convention: "A horizon of d years includes start_year through start_year + d - 1."
