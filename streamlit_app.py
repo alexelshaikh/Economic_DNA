@@ -3,7 +3,6 @@ from __future__ import annotations
 import html
 import json
 import pandas as pd
-import plotly.io as pio
 import streamlit as st
 
 # Form context for the main-area widgets (see the comment before the cost
@@ -24,7 +23,6 @@ from economic_dna.visualization import (
     dna_unit_cost_chart,
     lifecycle_chart,
     palette_for,
-    plotly_image_exports,
     projection_chart,
 )
 
@@ -487,6 +485,40 @@ st.markdown(
         background: var(--surface);
         border-color: var(--line);
         color: var(--download-text);
+    }
+    [class*="st-key-download_"] .stButton button,
+    [class*="st-key-download_"] button {
+        background: var(--surface);
+        border-color: var(--line);
+        color: var(--download-text);
+    }
+    .chart-loading {
+        align-items: center;
+        background:
+            linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--surface-subtle) 70%, transparent) 48%, transparent 96%),
+            var(--surface);
+        background-size: 220% 100%, 100% 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-sizing: border-box;
+        display: flex;
+        justify-content: center;
+        margin: 0.35rem 0 0.85rem;
+        min-height: 240px;
+        overflow: hidden;
+        position: relative;
+        width: 100%;
+        animation: chart-loading-sheen 1.25s var(--ease) infinite;
+    }
+    .chart-loading::before {
+        color: var(--muted);
+        content: "Loading chart";
+        font-size: 0.82rem;
+        font-weight: 650;
+    }
+    @keyframes chart-loading-sheen {
+        0% { background-position: 150% 0, 0 0; }
+        100% { background-position: -70% 0, 0 0; }
     }
 
     /* On desktop the sidebar's Calculate is hidden: the wide centered header
@@ -1924,7 +1956,6 @@ def _chart_downloads(
     key: str,
     csv_data: bytes,
     filename_base: str,
-    image_exports: dict[str, bytes],
     chart_key: str,
 ) -> None:
     st.markdown('<div class="export-label">Export chart</div>', unsafe_allow_html=True)
@@ -1939,21 +1970,15 @@ def _chart_downloads(
         width="stretch",
         help="Download the data shown in this graph.",
     )
-    columns[1].download_button(
+    columns[1].button(
         "PNG",
-        image_exports["png"],
-        f"{filename_base}.png",
-        "image/png",
         key=f"download_{key}_png",
         icon=":material/download:",
         width="stretch",
         help="Download this graph as a high-resolution PNG image.",
     )
-    columns[2].download_button(
+    columns[2].button(
         "SVG",
-        image_exports["svg"],
-        f"{filename_base}.svg",
-        "image/svg+xml",
         key=f"download_{key}_svg",
         icon=":material/download:",
         width="stretch",
@@ -2039,6 +2064,22 @@ def _plot_config(filename: str) -> dict:
     }
 
 
+def _plotly_chart_with_placeholder(figure, *, key: str, filename: str) -> None:
+    slot = st.empty()
+    height = int(figure.layout.height or 500)
+    with slot.container():
+        st.markdown(
+            f'<div class="chart-loading" style="height: {height}px;"></div>',
+            unsafe_allow_html=True,
+        )
+    slot.plotly_chart(
+        figure,
+        key=key,
+        width="stretch",
+        config=_plot_config(filename),
+    )
+
+
 @st.cache_data(show_spinner=False)
 def _cached_simulation(scenario: Scenario):
     return simulate_scenario(scenario)
@@ -2052,18 +2093,6 @@ def _cached_projection(scenario: Scenario, final_year: int) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def _cached_dna_costs(scenario: Scenario, final_year: int) -> pd.DataFrame:
     return simulate_dna_unit_costs(scenario, final_year)
-
-
-@st.cache_data(show_spinner=False)
-def _cached_plotly_image_exports(figure_json: str, height: int) -> dict[str, bytes]:
-    return plotly_image_exports(pio.from_json(figure_json), height=height)
-
-
-def _image_exports_for(figure) -> dict[str, bytes]:
-    return _cached_plotly_image_exports(
-        figure.to_json(),
-        int(figure.layout.height or 500),
-    )
 
 
 initial = _initial_scenario()
@@ -2661,17 +2690,15 @@ with overview_tab:
         "Each line includes initial and replacement writes, storage or operation, and expected retrieval.",
     )
     lifecycle_figure = lifecycle_chart(result, use_present_value, log_scale, theme=theme)
-    st.plotly_chart(
+    _plotly_chart_with_placeholder(
         lifecycle_figure,
         key="chart_lifecycle",
-        width="stretch",
-        config=_plot_config("dna-storage-lifecycle"),
+        filename="dna-storage-lifecycle",
     )
     _chart_downloads(
         "lifecycle",
         result.yearly.to_csv(index=False).encode("utf-8"),
         "dna-storage-lifecycle",
-        _image_exports_for(lifecycle_figure),
         "chart_lifecycle",
     )
     st.markdown(
@@ -2684,11 +2711,10 @@ with overview_tab:
         unsafe_allow_html=True,
     )
     breakdown_figure = breakdown_chart(result, log_scale, theme=theme)
-    st.plotly_chart(
+    _plotly_chart_with_placeholder(
         breakdown_figure,
         key="chart_breakdown",
-        width="stretch",
-        config=_plot_config("dna-storage-cost-components"),
+        filename="dna-storage-cost-components",
     )
     breakdown_columns = ["technology", *[component for component in (
         "write_cost_usd", "read_cost_usd", "maintenance_cost_usd", "total_cost_usd"
@@ -2697,7 +2723,6 @@ with overview_tab:
         "breakdown",
         result.totals[breakdown_columns].to_csv(index=False).encode("utf-8"),
         "dna-storage-cost-components",
-        _image_exports_for(breakdown_figure),
         "chart_breakdown",
     )
 
@@ -2709,17 +2734,15 @@ with outlook_tab:
         "than the comparison technology.",
     )
     projection_figure = projection_chart(projection, use_present_value, log_scale, theme=theme)
-    st.plotly_chart(
+    _plotly_chart_with_placeholder(
         projection_figure,
         key="chart_projection",
-        width="stretch",
-        config=_plot_config("dna-storage-start-year-outlook"),
+        filename="dna-storage-start-year-outlook",
     )
     _chart_downloads(
         "projection",
         projection.to_csv(index=False).encode("utf-8"),
         "dna-storage-start-year-outlook",
-        _image_exports_for(projection_figure),
         "chart_projection",
     )
     st.markdown(
@@ -2765,11 +2788,10 @@ with dna_cost_tab:
             log_scale,
             theme=theme,
         )
-        st.plotly_chart(
+        _plotly_chart_with_placeholder(
             synthesis_figure,
             key="chart_dna_synthesis",
-            width="stretch",
-            config=_plot_config("dna-synthesis-cost-trajectory"),
+            filename="dna-synthesis-cost-trajectory",
         )
         st.caption(
             "Modeled cost to synthesize enough DNA bases for 1 MB of logical data. "
@@ -2780,7 +2802,6 @@ with dna_cost_tab:
             "dna_synthesis",
             synthesis_data.to_csv(index=False).encode("utf-8"),
             "dna-synthesis-cost-trajectory",
-            _image_exports_for(synthesis_figure),
             "chart_dna_synthesis",
         )
     with chart_columns[1]:
@@ -2793,11 +2814,10 @@ with dna_cost_tab:
             log_scale,
             theme=theme,
         )
-        st.plotly_chart(
+        _plotly_chart_with_placeholder(
             sequencing_figure,
             key="chart_dna_sequencing",
-            width="stretch",
-            config=_plot_config("dna-sequencing-cost-trajectory"),
+            filename="dna-sequencing-cost-trajectory",
         )
         st.caption(
             "Modeled cost to sequence and retrieve 1 MB of logical data. "
@@ -2808,7 +2828,6 @@ with dna_cost_tab:
             "dna_sequencing",
             sequencing_data.to_csv(index=False).encode("utf-8"),
             "dna-sequencing-cost-trajectory",
-            _image_exports_for(sequencing_figure),
             "chart_dna_sequencing",
         )
 

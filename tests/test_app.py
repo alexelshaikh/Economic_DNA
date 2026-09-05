@@ -40,9 +40,27 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertEqual(len(app.metric), 4)
         self.assertEqual(len(app.get("plotly_chart")), 5)
         download_buttons = app.get("download_button")
-        self.assertEqual(len(download_buttons), 15)
+        self.assertEqual(len(download_buttons), 5)
         self.assertEqual(
             {button.key for button in download_buttons},
+            {
+                f"download_{graph}_csv"
+                for graph in (
+                    "lifecycle",
+                    "breakdown",
+                    "projection",
+                    "dna_synthesis",
+                    "dna_sequencing",
+                )
+            },
+        )
+        image_export_buttons = {
+            button.key
+            for button in app.button
+            if button.key and button.key.startswith("download_")
+        }
+        self.assertEqual(
+            image_export_buttons,
             {
                 f"download_{graph}_{file_format}"
                 for graph in (
@@ -52,7 +70,7 @@ class StreamlitAppTests(unittest.TestCase):
                     "dna_synthesis",
                     "dna_sequencing",
                 )
-                for file_format in ("csv", "png", "svg")
+                for file_format in ("png", "svg")
             },
         )
 

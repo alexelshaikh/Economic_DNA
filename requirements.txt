@@ -11,3 +11,4 @@ jupyter-server==2.17.0
 PyYAML==6.0.3
 streamlit==1.63.0
 plotly==7.0.0
+kaleido==1.4.0
