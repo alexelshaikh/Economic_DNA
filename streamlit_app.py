@@ -35,6 +35,12 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
+_main_dg = get_dg_singleton_instance().main_dg
+# The app temporarily attaches form data to the main dg so header/panel
+# controls can join the sidebar form. A callback-triggered rerun can interrupt
+# before the normal cleanup point, so each run must begin outside that form.
+_main_dg._form_data = None
+
 st.markdown(
     """
     <style>
@@ -2080,17 +2086,17 @@ def _plotly_chart_with_placeholder(figure, *, key: str, filename: str) -> None:
     )
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=32)
 def _cached_simulation(scenario: Scenario):
     return simulate_scenario(scenario)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=32)
 def _cached_projection(scenario: Scenario, final_year: int) -> pd.DataFrame:
     return simulate_start_years(scenario, final_year)
 
 
-@st.cache_data(show_spinner=False)
+@st.cache_data(show_spinner=False, max_entries=32)
 def _cached_dna_costs(scenario: Scenario, final_year: int) -> pd.DataFrame:
     return simulate_dna_unit_costs(scenario, final_year)
 
@@ -2253,8 +2259,6 @@ with st.sidebar:
 # to the main dg directly — the same mechanism the form block uses on itself.
 # Widgets added through `st.foo` calls read this dg's form data, so the panel
 # inputs batch with the sidebar's and only a Calculate submit reruns anything.
-_main_dg = get_dg_singleton_instance().main_dg
-
 # Cost-assumption rail and panel: slim vertical model tabs on the right
 # edge of the page (a bottom strip on phones). The tabs are pure-HTML radio
 # labels — opening, closing, and switching never trigger a script rerun, so

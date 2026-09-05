@@ -1,6 +1,8 @@
 import unittest
 from pathlib import Path
 
+from streamlit.delta_generator_singletons import get_dg_singleton_instance
+from streamlit.elements.lib.form_utils import FormData
 from streamlit.testing.v1 import AppTest
 
 from economic_dna import Scenario
@@ -73,6 +75,11 @@ class StreamlitAppTests(unittest.TestCase):
                 for file_format in ("png", "svg")
             },
         )
+
+    def test_rerun_starts_outside_synthetic_main_form(self):
+        get_dg_singleton_instance().main_dg._form_data = FormData("scenario_form")
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self.assertFalse(app.exception)
 
     def test_form_submission_recalculates_archive(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
