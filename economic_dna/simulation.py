@@ -258,3 +258,134 @@ def find_crossover_years(start_year_totals: pd.DataFrame, reference: str = "DNA"
         matches = pivot.index[pivot[reference] <= pivot[technology]]
         crossovers[technology] = int(matches[0]) if len(matches) else None
     return crossovers
+
+
+def find_lifecycle_crossovers(
+    result: SimulationResult, use_present_value: bool, reference: str = "DNA"
+) -> dict[str, int | None]:
+    """Within one archive's own timeline (fixed start year), the first
+    calendar year in which the reference technology's running total drops to
+    or below each comparison technology's. Unlike `find_crossover_years`
+    (which varies the start year), this reads `result.yearly` directly."""
+    value_column = "cumulative_present_value_usd" if use_present_value else "cumulative_cost_usd"
+    pivot = result.yearly.pivot(index="year", columns="technology", values=value_column)
+    if reference not in pivot:
+        return {}
+    crossovers: dict[str, int | None] = {}
+    for technology in pivot.columns:
+        if technology == reference:
+            continue
+        matches = pivot.index[pivot[reference] <= pivot[technology]]
+        crossovers[technology] = int(matches[0]) if len(matches) else None
+    return crossovers
+
+
+def _dna_synthesis_linear_terms(scenario: Scenario, use_present_value: bool) -> tuple[float, float]:
+    """DNA's lifecycle cost is `coefficient * dna_synthesis_cost_per_mb +
+    fixed`: only the write/replacement component scales with the synthesis
+    price, so `find_breakeven_synthesis_cost` can solve for it directly
+    instead of searching."""
+    years = np.arange(scenario.start_year, scenario.start_year + scenario.horizon_years, dtype=int)
+    decline = _decline_factor(scenario.synthesis_decline_percent, years, scenario.dna_cost_base_year)
+    replacements = _replacement_mask(years, scenario.start_year, scenario.dna_durability_years)
+    coefficient_terms = decline * replacements * scenario.archive_size_mb
+
+    read_per_mb = scenario.dna_sequencing_cost_per_mb * _decline_factor(
+        scenario.sequencing_decline_percent, years, scenario.dna_cost_base_year
+    )
+    fixed_terms = read_per_mb * scenario.archive_size_mb * scenario.annual_retrieval_percent / 100
+
+    if use_present_value:
+        discount = np.power(1 + scenario.discount_rate_percent / 100, years - scenario.start_year)
+        coefficient_terms = coefficient_terms / discount
+        fixed_terms = fixed_terms / discount
+
+    return float(coefficient_terms.sum()), float(fixed_terms.sum())
+
+
+BREAKEVEN_COLUMNS = ["technology", "breakeven_synthesis_cost_usd_per_mb", "reduction_factor"]
+
+
+def find_breakeven_synthesis_cost(scenario: Scenario, use_present_value: bool) -> pd.DataFrame:
+    """USD/MB synthesis cost at which DNA's lifecycle cost equals each
+    comparison technology's, holding every other input fixed. `None` means
+    DNA cannot reach that technology's cost even with free synthesis."""
+    if "DNA" not in scenario.technologies:
+        return pd.DataFrame(columns=BREAKEVEN_COLUMNS)
+
+    coefficient, fixed_cost = _dna_synthesis_linear_terms(scenario, use_present_value)
+    value_column = "present_value_usd" if use_present_value else "total_cost_usd"
+    totals = simulate_scenario(scenario).totals.set_index("technology_key")[value_column]
+
+    rows: list[dict[str, float | str | None]] = []
+    for technology in scenario.technologies:
+        if technology == "DNA":
+            continue
+        target = float(totals[technology])
+        breakeven = (target - fixed_cost) / coefficient if coefficient > 0 else None
+        if breakeven is not None and breakeven < 0:
+            breakeven = None
+        reduction_factor = (
+            scenario.dna_synthesis_cost_per_mb / breakeven
+            if breakeven is not None and breakeven > 0
+            else None
+        )
+        rows.append(
+            {
+                "technology": _technology_label(scenario, technology),
+                "breakeven_synthesis_cost_usd_per_mb": breakeven,
+                "reduction_factor": reduction_factor,
+            }
+        )
+    return pd.DataFrame(rows, columns=BREAKEVEN_COLUMNS)
+
+
+def simulate_dna_uncertainty_band(
+    scenario: Scenario,
+    use_present_value: bool,
+    n_samples: int = 300,
+    relative_spread: float = 0.3,
+    seed: int = 0,
+) -> pd.DataFrame:
+    """P10/P50/P90 band for DNA's cumulative cost, from sampling the
+    synthesis and sequencing decline rates within +/- relative_spread of the
+    scenario's chosen values. Fully vectorized over (sample, year), no
+    per-sample simulation loop."""
+    if n_samples < 2:
+        raise ValueError("n_samples must be at least 2")
+    rng = np.random.default_rng(seed)
+    years = np.arange(scenario.start_year, scenario.start_year + scenario.horizon_years, dtype=int)
+
+    def _sampled_decline(base_percent: float) -> np.ndarray:
+        sampled = base_percent * (1 + rng.uniform(-relative_spread, relative_spread, n_samples))
+        return np.clip(sampled, 0.0, 99.999)[:, None]
+
+    synthesis_factor = _decline_factor(
+        _sampled_decline(scenario.synthesis_decline_percent), years[None, :], scenario.dna_cost_base_year
+    )
+    sequencing_factor = _decline_factor(
+        _sampled_decline(scenario.sequencing_decline_percent), years[None, :], scenario.dna_cost_base_year
+    )
+    replacements = _replacement_mask(years, scenario.start_year, scenario.dna_durability_years)
+
+    write = (
+        scenario.dna_synthesis_cost_per_mb
+        * synthesis_factor
+        * scenario.archive_size_mb
+        * replacements[None, :]
+    )
+    read = (
+        scenario.dna_sequencing_cost_per_mb
+        * sequencing_factor
+        * scenario.archive_size_mb
+        * scenario.annual_retrieval_percent
+        / 100
+    )
+    total = write + read
+    if use_present_value:
+        discount = np.power(1 + scenario.discount_rate_percent / 100, years - scenario.start_year)
+        total = total / discount[None, :]
+
+    cumulative = np.cumsum(total, axis=1)
+    p10, p50, p90 = np.quantile(cumulative, [0.1, 0.5, 0.9], axis=0)
+    return pd.DataFrame({"year": years, "p10": p10, "p50": p50, "p90": p90})

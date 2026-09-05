@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements-app.txt
 COPY assumptions.yaml streamlit_app.py ./
 COPY economic_dna ./economic_dna
 COPY .streamlit ./.streamlit
+COPY data ./data
 
 RUN useradd --create-home appuser && chown -R appuser:appuser /app
 USER appuser

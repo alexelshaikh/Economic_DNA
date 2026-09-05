@@ -5,7 +5,7 @@ from streamlit.delta_generator_singletons import get_dg_singleton_instance
 from streamlit.elements.lib.form_utils import FormData
 from streamlit.testing.v1 import AppTest
 
-from economic_dna import Scenario
+from economic_dna import PRESET_SCENARIOS, Scenario
 
 
 class StreamlitAppTests(unittest.TestCase):
@@ -25,7 +25,14 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertEqual(app.title[0].value, "DNA Storage Cost Explorer")
         self.assertEqual(
             [tab.label for tab in app.tabs],
-            ["Lifecycle", "Start-year outlook", "DNA unit costs", "Assumptions", "About"],
+            [
+                "Lifecycle",
+                "Start-year outlook",
+                "DNA unit costs",
+                "Sensitivity",
+                "Assumptions",
+                "About",
+            ],
         )
         self.assertTrue(
             any(
@@ -40,9 +47,9 @@ class StreamlitAppTests(unittest.TestCase):
             any("mailto:alex@el-shaikh.com" in (markdown.value or "") for markdown in app.markdown)
         )
         self.assertEqual(len(app.metric), 4)
-        self.assertEqual(len(app.get("plotly_chart")), 5)
+        self.assertEqual(len(app.get("plotly_chart")), 7)
         download_buttons = app.get("download_button")
-        self.assertEqual(len(download_buttons), 5)
+        self.assertEqual(len(download_buttons), 7)
         self.assertEqual(
             {button.key for button in download_buttons},
             {
@@ -53,6 +60,8 @@ class StreamlitAppTests(unittest.TestCase):
                     "projection",
                     "dna_synthesis",
                     "dna_sequencing",
+                    "breakeven",
+                    "sensitivity",
                 )
             },
         )
@@ -71,6 +80,8 @@ class StreamlitAppTests(unittest.TestCase):
                     "projection",
                     "dna_synthesis",
                     "dna_sequencing",
+                    "breakeven",
+                    "sensitivity",
                 )
                 for file_format in ("png", "svg")
             },
@@ -184,6 +195,111 @@ class StreamlitAppTests(unittest.TestCase):
             app.number_input(key="dna_synthesis_cost").value,
             baseline.dna_synthesis_cost_per_mb,
         )
+
+    def test_sensitivity_tab_shows_breakeven_table_and_tornado_chart(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self.assertFalse(app.exception)
+        chart_keys = {chart.key for chart in app.get("plotly_chart")}
+        self.assertIn("chart_breakeven", chart_keys)
+        self.assertIn("chart_sensitivity", chart_keys)
+        table_html = " ".join(markdown.value or "" for markdown in app.markdown)
+        self.assertIn("Break-even synthesis cost", table_html)
+        self.assertIn("Today vs. break-even", table_html)
+        # The paper-baseline default is not reachable by lowering synthesis
+        # cost alone (DNA's sequencing/retrieval cost already exceeds every
+        # built-in alternative) -- verify that lands in the table, not raw
+        # scientific notation or a blank cell.
+        self.assertIn("Not reachable", table_html)
+
+    def test_sensitivity_tab_asks_for_dna_when_it_is_not_selected(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        app.checkbox(key="tech_dna").uncheck()
+        self._submit_form(app)
+        app.run()
+        self.assertFalse(app.exception)
+        chart_keys = {chart.key for chart in app.get("plotly_chart")}
+        self.assertNotIn("chart_breakeven", chart_keys)
+        self.assertNotIn("chart_sensitivity", chart_keys)
+        self.assertTrue(
+            any("break-even price" in (info.value or "") for info in app.info)
+        )
+
+    def test_uncertainty_band_checkbox_is_only_offered_when_dna_is_selected(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self.assertIn("show_uncertainty_band", {c.key for c in app.checkbox})
+
+        app.checkbox(key="tech_dna").uncheck()
+        self._submit_form(app)
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertNotIn("show_uncertainty_band", {c.key for c in app.checkbox})
+
+    def test_preset_button_populates_fields_without_committing_until_calculate(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        preset = PRESET_SCENARIOS["1 PB genomics cold archive"]
+
+        self._click_button(app, "preset_1")
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.number_input(key="archive_value").value, 1.0)
+        self.assertEqual(app.selectbox(key="archive_unit").value, "PB")
+        self.assertEqual(app.number_input(key="asset_value").value, preset.average_asset_size_mb)
+        self.assertEqual(app.number_input(key="retrieval").value, preset.annual_retrieval_percent)
+        self.assertEqual(app.number_input(key="horizon").value, preset.horizon_years)
+
+        # Fields are populated, but the previous (paper baseline) results are
+        # still on screen until Calculate is pressed -- same as Reset.
+        archive_metric = next(metric for metric in app.metric if metric.label == "Archive")
+        self.assertEqual(archive_metric.value, "1 TB")
+
+        self._submit_form(app)
+        app.run()
+        self.assertFalse(app.exception)
+        archive_metric = next(metric for metric in app.metric if metric.label == "Archive")
+        self.assertEqual(archive_metric.value, "1K TB")
+
+    def test_every_preset_button_is_wired_to_a_known_preset(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        preset_buttons = [button for button in app.button if button.key and button.key.startswith("preset_")]
+        self.assertEqual(len(preset_buttons), len(PRESET_SCENARIOS))
+        self.assertEqual({button.label for button in preset_buttons}, set(PRESET_SCENARIOS))
+
+    def test_order_of_magnitude_steppers_scale_the_synthesis_cost_field(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        before = app.number_input(key="dna_synthesis_cost").value
+
+        self._click_button(app, "dna_synthesis_cost_mul10")
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertAlmostEqual(app.number_input(key="dna_synthesis_cost").value, before * 10)
+
+        self._click_button(app, "dna_synthesis_cost_div10")
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertAlmostEqual(app.number_input(key="dna_synthesis_cost").value, before)
+
+    def test_dna_cost_fields_use_a_significant_figure_format_that_never_displays_as_zero(self):
+        # A fixed-decimal format like "%.6f" silently displays any value
+        # below its decimal precision (e.g. 1e-7) as "0.000000" -- the
+        # underlying value is untouched (Streamlit's format is display-only),
+        # but it looks exactly like data loss to a user. "%.Ng" scales with
+        # magnitude instead, so very small values stay visibly non-zero.
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        for key in ("dna_synthesis_cost", "dna_sequencing_cost"):
+            with self.subTest(key=key):
+                widget = app.number_input(key=key)
+                self.assertRegex(widget.proto.format, r"^%\.\d+g$")
+
+    def test_setting_a_very_small_synthesis_cost_is_preserved_through_calculate(self):
+        # Regression check for the format-only display issue: the committed
+        # value must survive Calculate exactly, not just the display text.
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        app.number_input(key="dna_synthesis_cost").set_value(1e-7)
+        self._submit_form(app)
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.number_input(key="dna_synthesis_cost").value, 1e-7)
+
 
     def test_cost_tabs_are_a_form_radio(self):
         # The tabs are a Streamlit radio INSIDE the form: the frontend manages

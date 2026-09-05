@@ -11,19 +11,29 @@ from streamlit.delta_generator_singletons import get_dg_singleton_instance
 from streamlit.elements.lib.form_utils import FormData as _FormData
 
 from economic_dna import (
+    PRESET_SCENARIOS,
     Scenario,
+    dna_cost_sensitivity,
+    find_breakeven_synthesis_cost,
     find_crossover_years,
+    find_lifecycle_crossovers,
+    load_observed_sequencing_costs,
     simulate_dna_unit_costs,
+    simulate_dna_uncertainty_band,
     simulate_scenario,
     simulate_start_years,
+    synthesis_historical_trend,
 )
 from economic_dna.assumptions import load_assumptions
 from economic_dna.visualization import (
     breakdown_chart,
+    breakeven_chart,
     dna_unit_cost_chart,
+    format_display_number,
     lifecycle_chart,
     palette_for,
     projection_chart,
+    sensitivity_chart,
 )
 
 
@@ -820,6 +830,16 @@ st.markdown(
     body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel .cost-title-tape { display: block; }
     body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel .cost-title-custom { display: block; }
 
+    /* Simple/Advanced: price base years, durability, and replacement cycles
+       are hidden by default across every cost panel. Unit costs and decline
+       rates -- the inputs that actually drive the cost projections -- are
+       never wrapped in an "advanced-" container, so they always stay
+       visible regardless of this toggle. */
+    [class*="st-key-advanced-"] { display: none; }
+    body:has(.st-key-sidebar-advanced-toggle input:checked) [class*="st-key-advanced-"] {
+        display: block;
+    }
+
     .st-key-cost-panel .cost-panel-title {
         color: var(--ink);
         font-size: 1.2rem;
@@ -949,6 +969,14 @@ st.markdown(
         border-color: var(--accent);
         color: var(--accent-strong);
     }
+    /* Order-of-magnitude steppers directly under the DNA synthesis and
+       sequencing cost inputs: a compact paired row, not full-size buttons. */
+    [class*="st-key-steppers-"] { margin: -0.6rem 0 0.9rem; }
+    [class*="st-key-steppers-"] [data-testid="stFormSubmitButton"] button {
+        font-size: 0.78rem;
+        min-height: 1.9rem;
+        padding: 0 0.4rem;
+    }
 
     .page-kicker { margin-bottom: 0.35rem; }
     .page-deck {
@@ -987,6 +1015,8 @@ st.markdown(
         padding-right: 0.75rem;
     }
     .model-item:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
+    .st-key-copy-link-anchor { margin: -0.9rem 0 1.25rem; }
+    .st-key-copy-link-anchor .stButton button { font-size: 0.8rem; padding: 0.3rem 0.75rem; }
 
     .scenario-bar {
         align-items: center;
@@ -1940,6 +1970,17 @@ def _quantity(value: float) -> str:
     return f"{value:,.0f}"
 
 
+def _archive_size_label(value_tb: float) -> str:
+    # Plain ",.3g" silently switches to "1e+03"-style scientific notation for
+    # any round value >= 1000 (any archive at or above 1 PB); the preset
+    # scenarios made this visible immediately, so it needed a real fix.
+    absolute = abs(value_tb)
+    for threshold, suffix in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if absolute >= threshold:
+            return f"{value_tb / threshold:,.3g}{suffix}"
+    return f"{value_tb:,.3g}"
+
+
 def _section_intro(title: str, description: str) -> None:
     st.markdown(
         f'<div class="tab-intro"><h2>{title}</h2><p>{description}</p></div>',
@@ -2065,6 +2106,74 @@ def _bind_live_plotly_image_downloads(key: str, chart_key: str, filename_base: s
     )
 
 
+def _bind_copy_link_button(key: str) -> None:
+    """Copies the browser's current address bar URL (already synced to the
+    committed scenario by Calculate) to the clipboard. Runs in the parent
+    document, like the other iframe-JS helpers here, so the Clipboard API
+    call is made by the top-level page rather than the sandboxed iframe."""
+    st.iframe(
+        f"""
+        <script>
+        (() => {{
+          const bind = () => {{
+            const root = parent.document.querySelector(".st-key-{key}");
+            const buttons = root ? root.querySelectorAll("button") : [];
+            // Streamlit renders a hidden 0x0 tooltip-wrapper copy first.
+            const button = buttons.length ? buttons[buttons.length - 1] : null;
+            if (!button || button.dataset.copyLinkBound) return Boolean(button);
+            button.dataset.copyLinkBound = "1";
+            const original = button.innerHTML;
+            const flash = (text) => {{
+              button.innerHTML = original;
+              button.append(Object.assign(parent.document.createElement("span"), {{ textContent: " " + text }}));
+              setTimeout(() => {{ button.innerHTML = original; }}, 1600);
+            }};
+            // Legacy fallback for browsers/contexts that block the async
+            // Clipboard API (older browsers, non-secure origins, some
+            // automation and enterprise policies) -- still gives feedback
+            // either way instead of a click that silently does nothing.
+            const legacyCopy = () => {{
+              const input = parent.document.createElement("input");
+              input.value = parent.location.href;
+              input.style.position = "fixed";
+              input.style.opacity = "0";
+              parent.document.body.appendChild(input);
+              input.focus();
+              input.select();
+              let ok = false;
+              try {{ ok = parent.document.execCommand("copy"); }} catch (err) {{ ok = false; }}
+              input.remove();
+              flash(ok ? "Copied!" : "Copy failed - copy the address bar");
+            }};
+            button.addEventListener("click", (event) => {{
+              event.preventDefault();
+              event.stopPropagation();
+              event.stopImmediatePropagation();
+              if (!parent.navigator.clipboard || !parent.navigator.clipboard.writeText) {{
+                legacyCopy();
+                return;
+              }}
+              parent.navigator.clipboard.writeText(parent.location.href).then(
+                () => flash("Copied!"),
+                () => legacyCopy(),
+              );
+            }}, true);
+            return true;
+          }};
+          if (bind()) return;
+          let tries = 0;
+          const timer = setInterval(() => {{
+            tries += 1;
+            if (bind() || tries > 100) clearInterval(timer);
+          }}, 100);
+        }})();
+        </script>
+        """,
+        width=1,
+        height=1,
+    )
+
+
 def _plot_config(filename: str) -> dict:
     return {
         "displaylogo": False,
@@ -2103,6 +2212,31 @@ def _cached_dna_costs(scenario: Scenario, final_year: int) -> pd.DataFrame:
     return simulate_dna_unit_costs(scenario, final_year)
 
 
+@st.cache_data(show_spinner=False, max_entries=32)
+def _cached_uncertainty_band(scenario: Scenario, use_present_value: bool) -> pd.DataFrame:
+    return simulate_dna_uncertainty_band(scenario, use_present_value)
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def _cached_sensitivity(scenario: Scenario, use_present_value: bool) -> pd.DataFrame:
+    return dna_cost_sensitivity(scenario, use_present_value)
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def _cached_breakeven(scenario: Scenario, use_present_value: bool) -> pd.DataFrame:
+    return find_breakeven_synthesis_cost(scenario, use_present_value)
+
+
+@st.cache_data(show_spinner=False, max_entries=1)
+def _cached_synthesis_history(base_year: int) -> pd.DataFrame:
+    return synthesis_historical_trend(2000, base_year)
+
+
+@st.cache_data(show_spinner=False, max_entries=1)
+def _cached_observed_sequencing_costs() -> pd.DataFrame:
+    return load_observed_sequencing_costs()
+
+
 initial = _initial_scenario()
 query = _query_mapping()
 initial_widgets = _widget_state_from_scenario(initial, query)
@@ -2112,6 +2246,17 @@ baseline_widgets = _widget_state_from_scenario(Scenario())
 def _reset_widget_keys(widget_keys: list[str]) -> None:
     for widget_key in widget_keys:
         st.session_state[widget_key] = baseline_widgets[widget_key]
+
+
+def _apply_preset(preset_name: str) -> None:
+    # Same mechanism as _reset_widget_keys: an on_click callback runs before
+    # the next rerun re-instantiates the widgets, so writing session_state
+    # here is safe even though these are form widgets. Reads query params
+    # directly (rather than closing over the outer `query`) so it reflects
+    # the current URL even though callbacks bind to the run that created them.
+    preset_widgets = _widget_state_from_scenario(PRESET_SCENARIOS[preset_name], _query_mapping())
+    for widget_key, value in preset_widgets.items():
+        st.session_state[widget_key] = value
 
 
 for widget_key, default_value in initial_widgets.items():
@@ -2127,6 +2272,19 @@ st.session_state.setdefault("committed_widgets", dict(initial_widgets))
 # the buttons or the charts. The form block lives in the sidebar; the panel
 # and header Calculate join it via the main dg's form data below.
 with st.sidebar:
+    with st.container(key="sidebar-presets"):
+        st.markdown('<div class="sidebar-section">Start from a preset</div>', unsafe_allow_html=True)
+        preset_names = list(PRESET_SCENARIOS)
+        preset_columns = st.columns(2)
+        for index, preset_name in enumerate(preset_names):
+            preset_columns[index % 2].button(
+                preset_name,
+                key=f"preset_{index}",
+                on_click=_apply_preset,
+                args=(preset_name,),
+                width="stretch",
+                help=f"Load the “{preset_name}” scenario into the fields below, then press Calculate.",
+            )
     with st.container(key="sidebar-reset-btn"):
         st.button(
             "Reset sidebar values to paper baseline",
@@ -2134,6 +2292,14 @@ with st.sidebar:
             on_click=_reset_widget_keys,
             args=(SIDEBAR_WIDGET_KEYS,),
             width="stretch",
+        )
+    with st.container(key="sidebar-advanced-toggle"):
+        st.checkbox(
+            "Show advanced cost assumptions",
+            key="show_advanced",
+            help="Reveals price base years, durability, and replacement cycles in the cost "
+            "assumption panels on the right edge. Unit costs and decline rates -- the inputs "
+            "that drive the projections -- are always visible.",
         )
     with st.form("scenario_form", border=False, enter_to_submit=False):
         input_column, action_column = st.columns([6, 1], gap="small")
@@ -2291,6 +2457,37 @@ def _render_model_reset(model_key: str) -> None:
         )
 
 
+def _scale_widget_value(widget_key: str, factor: float) -> None:
+    # Same before-the-next-rerun timing as _reset_widget_keys: safe to write
+    # even though this is a form widget.
+    st.session_state[widget_key] = st.session_state[widget_key] * factor
+
+
+def _render_order_of_magnitude_steppers(widget_key: str) -> None:
+    """A cost spanning many orders of magnitude (DNA synthesis cost runs from
+    a fraction of a cent to tens of thousands of dollars per MB) is tedious
+    to explore by typing digits one at a time. These buttons jump by a full
+    decade in either direction."""
+    with st.container(key=f"steppers-{widget_key}"):
+        step_columns = st.columns(2)
+        step_columns[0].form_submit_button(
+            "÷10",
+            key=f"{widget_key}_div10",
+            on_click=_scale_widget_value,
+            args=(widget_key, 0.1),
+            width="stretch",
+            help="Divide this value by 10.",
+        )
+        step_columns[1].form_submit_button(
+            "×10",
+            key=f"{widget_key}_mul10",
+            on_click=_scale_widget_value,
+            args=(widget_key, 10.0),
+            width="stretch",
+            help="Multiply this value by 10.",
+        )
+
+
 with st.container(key="calculate-anchor"):
     calculate_header = st.form_submit_button(
         "Calculate",
@@ -2337,21 +2534,26 @@ with st.container(key="cost-panel"):
 
     with st.container(key="cost_model_dna"):
         _render_model_reset("dna")
-        dna_cost_base_year = st.number_input(
-            "DNA cost base year", min_value=2000, max_value=2500,
-            key="dna_cost_base_year",
-            help="Year to which the editable synthesis and sequencing unit costs apply.",
-        )
+        with st.container(key="advanced-dna_cost_base_year"):
+            dna_cost_base_year = st.number_input(
+                "DNA cost base year", min_value=2000, max_value=2500,
+                key="dna_cost_base_year",
+                help="Year to which the editable synthesis and sequencing unit costs apply.",
+            )
         dna_synthesis_cost = st.number_input(
             "Synthesis cost (USD/MB)", min_value=0.0,
-            format="%.6f", key="dna_synthesis_cost",
-            help="Cost in the DNA cost base year to synthesize enough bases for 1 MB of logical data, before redundancy and indexing overhead.",
+            format="%.10g", key="dna_synthesis_cost",
+            help="Cost in the DNA cost base year to synthesize enough bases for 1 MB of logical data, before redundancy and indexing overhead. "
+            "Shown in significant-figure notation (e.g. 1e-07) so very small values stay visible instead of displaying as 0.",
         )
+        _render_order_of_magnitude_steppers("dna_synthesis_cost")
         dna_sequencing_cost = st.number_input(
             "Sequencing cost (USD/MB)", min_value=0.0,
-            format="%.8f", key="dna_sequencing_cost",
-            help="Cost in the DNA cost base year to sequence 1 MB of retrieved logical data.",
+            format="%.10g", key="dna_sequencing_cost",
+            help="Cost in the DNA cost base year to sequence 1 MB of retrieved logical data. "
+            "Shown in significant-figure notation (e.g. 1e-07) so very small values stay visible instead of displaying as 0.",
         )
+        _render_order_of_magnitude_steppers("dna_sequencing_cost")
         synthesis_decline = st.number_input(
             "Synthesis annual decline (%)", min_value=0.0, max_value=99.99,
             key="synthesis_decline",
@@ -2362,20 +2564,22 @@ with st.container(key="cost-panel"):
             key="sequencing_decline",
             help="Percentage by which sequencing cost is assumed to fall each calendar year.",
         )
-        dna_durability = st.number_input(
-            "DNA durability (years)", min_value=1, max_value=10_000,
-            key="dna_durability",
-            help="Years before the archive must be synthesized again. No replacement occurs at the exact end of the horizon.",
-        )
+        with st.container(key="advanced-dna_durability"):
+            dna_durability = st.number_input(
+                "DNA durability (years)", min_value=1, max_value=10_000,
+                key="dna_durability",
+                help="Years before the archive must be synthesized again. No replacement occurs at the exact end of the horizon.",
+            )
 
     with st.container(key="cost_model_amazon"):
         _render_model_reset("amazon")
-        st.caption("Price reference")
-        amazon_base_year = st.number_input(
-            "Amazon price base year", min_value=2000, max_value=2500,
-            key="amazon_base_year",
-            help="Calendar year to which all Amazon prices below apply.",
-        )
+        with st.container(key="advanced-amazon_reference"):
+            st.caption("Price reference")
+            amazon_base_year = st.number_input(
+                "Amazon price base year", min_value=2000, max_value=2500,
+                key="amazon_base_year",
+                help="Calendar year to which all Amazon prices below apply.",
+            )
         amazon_decline = st.number_input(
             "Amazon annual price decline (%)", min_value=0.0, max_value=99.99,
             key="amazon_decline",
@@ -2409,12 +2613,13 @@ with st.container(key="cost-panel"):
 
     with st.container(key="cost_model_azure"):
         _render_model_reset("azure")
-        st.caption("Price reference")
-        azure_base_year = st.number_input(
-            "Azure price base year", min_value=2000, max_value=2500,
-            key="azure_base_year",
-            help="Calendar year to which all Azure prices below apply.",
-        )
+        with st.container(key="advanced-azure_reference"):
+            st.caption("Price reference")
+            azure_base_year = st.number_input(
+                "Azure price base year", min_value=2000, max_value=2500,
+                key="azure_base_year",
+                help="Calendar year to which all Azure prices below apply.",
+            )
         azure_decline = st.number_input(
             "Azure annual price decline (%)", min_value=0.0, max_value=99.99,
             key="azure_decline",
@@ -2448,17 +2653,18 @@ with st.container(key="cost-panel"):
 
     with st.container(key="cost_model_tape"):
         _render_model_reset("tape")
-        st.caption("Price reference")
-        tape_base_year = st.number_input(
-            "Tape price base year", min_value=2000, max_value=2500,
-            key="tape_base_year",
-            help="Calendar year to which the tape media, hardware, and energy prices apply.",
-        )
-        tape_durability = st.number_input(
-            "Tape durability (years)", min_value=1, max_value=1_000,
-            key="tape_durability",
-            help="Years between complete tape media replacement writes.",
-        )
+        with st.container(key="advanced-tape_reference"):
+            st.caption("Price reference")
+            tape_base_year = st.number_input(
+                "Tape price base year", min_value=2000, max_value=2500,
+                key="tape_base_year",
+                help="Calendar year to which the tape media, hardware, and energy prices apply.",
+            )
+            tape_durability = st.number_input(
+                "Tape durability (years)", min_value=1, max_value=1_000,
+                key="tape_durability",
+                help="Years between complete tape media replacement writes.",
+            )
         st.caption("Base-year prices")
         st.caption(
             "Tape cartridge and hardware values are added together. If your hardware estimate already "
@@ -2512,10 +2718,11 @@ with st.container(key="cost-panel"):
             "Display name", key="custom_name",
             help="Name used for the custom technology in charts, tables, and downloads.",
         )
-        custom_base_year = st.number_input(
-            "Price base year", min_value=2000, max_value=2500,
-            key="custom_base_year", help="Year to which all custom prices apply.",
-        )
+        with st.container(key="advanced-custom_base_year"):
+            custom_base_year = st.number_input(
+                "Price base year", min_value=2000, max_value=2500,
+                key="custom_base_year", help="Year to which all custom prices apply.",
+            )
         custom_write_tb = st.number_input(
             "Initial write cost (USD/TB)", min_value=0.0,
             key="custom_write_tb", help="Capacity-based charge to write or replace one TB.",
@@ -2545,11 +2752,12 @@ with st.container(key="cost-panel"):
             key="custom_decline",
             help="Annual percentage reduction applied to every custom price.",
         )
-        custom_replacement = st.number_input(
-            "Replacement interval (years)", min_value=0, max_value=10_000,
-            key="custom_replacement",
-            help="Years between complete rewrites. Use 0 for a service with no replacement writes.",
-        )
+        with st.container(key="advanced-custom_replacement"):
+            custom_replacement = st.number_input(
+                "Replacement interval (years)", min_value=0, max_value=10_000,
+                key="custom_replacement",
+                help="Years between complete rewrites. Use 0 for a service with no replacement writes.",
+            )
 
     # Phones: the panel carries its own Calculate bar (sticky at the sheet's
     # bottom) so a cost change commits without closing the panel. Hidden on
@@ -2637,6 +2845,14 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+with st.container(key="copy-link-anchor"):
+    st.button(
+        "Copy link to this scenario",
+        key="copy_scenario_link",
+        icon=":material/link:",
+        help="Copies this page's address, which already encodes every input from your last Calculate.",
+    )
+_bind_copy_link_button("copy_scenario_link")
 
 totals = result.totals.sort_values(value_column)
 cheapest = totals.iloc[0]
@@ -2661,7 +2877,7 @@ st.markdown(
 )
 
 metric_columns = st.columns(4)
-metric_columns[0].metric("Archive", f"{scenario.archive_size_tb:,.3g} TB")
+metric_columns[0].metric("Archive", f"{_archive_size_label(scenario.archive_size_tb)} TB")
 metric_columns[1].metric(
     "Data objects",
     _quantity(scenario.number_of_assets),
@@ -2685,8 +2901,8 @@ else:
         metric_columns[3].metric("DNA lifecycle cost", _money(dna_total))
 
 st.markdown('<div class="workspace-kicker">Analysis workspace</div>', unsafe_allow_html=True)
-overview_tab, outlook_tab, dna_cost_tab, assumptions_tab, about_tab = st.tabs(
-    ["Lifecycle", "Start-year outlook", "DNA unit costs", "Assumptions", "About"]
+overview_tab, outlook_tab, dna_cost_tab, sensitivity_tab, assumptions_tab, about_tab = st.tabs(
+    ["Lifecycle", "Start-year outlook", "DNA unit costs", "Sensitivity", "Assumptions", "About"]
 )
 
 with overview_tab:
@@ -2695,7 +2911,27 @@ with overview_tab:
         "Cumulative lifecycle cost for one archive opened in the selected start year. "
         "Each line includes initial and replacement writes, storage or operation, and expected retrieval.",
     )
-    lifecycle_figure = lifecycle_chart(result, use_present_value, log_scale, theme=theme)
+    show_uncertainty = (
+        "DNA" in scenario.technologies
+        and st.checkbox(
+            "Show DNA uncertainty band",
+            key="show_uncertainty_band",
+            help="Shades the P10-P90 range from sampling the synthesis and sequencing "
+            "decline rates +/-30% around your chosen values, everything else held fixed.",
+        )
+    )
+    dna_uncertainty = (
+        _cached_uncertainty_band(scenario, use_present_value) if show_uncertainty else None
+    )
+    lifecycle_crossovers = find_lifecycle_crossovers(result, use_present_value)
+    lifecycle_figure = lifecycle_chart(
+        result,
+        use_present_value,
+        log_scale,
+        theme=theme,
+        dna_uncertainty=dna_uncertainty,
+        crossovers=lifecycle_crossovers,
+    )
     _plotly_chart_with_placeholder(
         lifecycle_figure,
         key="chart_lifecycle",
@@ -2783,6 +3019,18 @@ with dna_cost_tab:
         f"selected annual decline rates through {dna_curve_end}. They are unit-cost assumptions, "
         "not lifecycle totals.",
     )
+    show_history = st.checkbox(
+        "Show historical context",
+        value=True,
+        key="show_dna_history",
+        help="Synthesis: the paper's fitted historical trend back to 2000. Sequencing: "
+        "NHGRI's measured cost per Mb, 2001-2022.",
+    )
+    synthesis_history = (
+        _cached_synthesis_history(scenario.dna_cost_base_year) if show_history else None
+    )
+    observed_sequencing = _cached_observed_sequencing_costs() if show_history else None
+
     chart_columns = st.columns(2)
     with chart_columns[0]:
         synthesis_title = "DNA synthesis cost trajectory"
@@ -2793,6 +3041,7 @@ with dna_cost_tab:
             chart_palette["unit_cost_colors"]["synthesis"],
             log_scale,
             theme=theme,
+            history=synthesis_history,
         )
         _plotly_chart_with_placeholder(
             synthesis_figure,
@@ -2801,7 +3050,9 @@ with dna_cost_tab:
         )
         st.caption(
             "Modeled cost to synthesize enough DNA bases for 1 MB of logical data. "
-            "Redundancy, indexing, and coding overhead are not added here."
+            "Redundancy, indexing, and coding overhead are not added here. The dotted "
+            "trend is the paper's historical fit, not a raw dataset: no public per-MB "
+            "synthesis price series exists the way NHGRI's sequencing table does."
         )
         synthesis_data = dna_costs[["year", "synthesis_cost_usd_per_mb"]]
         _chart_downloads(
@@ -2819,6 +3070,7 @@ with dna_cost_tab:
             chart_palette["unit_cost_colors"]["sequencing"],
             log_scale,
             theme=theme,
+            observed=observed_sequencing,
         )
         _plotly_chart_with_placeholder(
             sequencing_figure,
@@ -2827,7 +3079,9 @@ with dna_cost_tab:
         )
         st.caption(
             "Modeled cost to sequence and retrieve 1 MB of logical data. "
-            "It is applied to the share of the archive retrieved each year."
+            "It is applied to the share of the archive retrieved each year. Observed "
+            "markers are NHGRI's reported nominal-USD cost per Mb at each date, not "
+            "adjusted to this model's constant-USD convention."
         )
         sequencing_data = dna_costs[["year", "sequencing_cost_usd_per_mb"]]
         _chart_downloads(
@@ -2835,6 +3089,106 @@ with dna_cost_tab:
             sequencing_data.to_csv(index=False).encode("utf-8"),
             "dna-sequencing-cost-trajectory",
             "chart_dna_sequencing",
+        )
+
+with sensitivity_tab:
+    _section_intro(
+        "Synthesis price needed to break even",
+        "For each alternative technology, the DNA synthesis price at which DNA's lifecycle cost "
+        "would exactly equal that alternative's, with every other input held at your current "
+        "scenario. The dashed “Current” line marks today's synthesis price: a bar reaching left "
+        "of it means synthesis still has to get cheaper to catch up; a bar reaching right of it "
+        "means DNA already wins at today's price.",
+    )
+    if "DNA" not in scenario.technologies:
+        st.info("Select DNA to see its break-even price and cost sensitivity.")
+    else:
+        breakeven_frame = _cached_breakeven(scenario, use_present_value)
+        if breakeven_frame.empty:
+            st.info("Select at least one comparison technology to calculate a break-even price.")
+        else:
+            breakeven_figure = breakeven_chart(
+                breakeven_frame, scenario.dna_synthesis_cost_per_mb, theme=theme
+            )
+            _plotly_chart_with_placeholder(
+                breakeven_figure,
+                key="chart_breakeven",
+                filename="dna-synthesis-breakeven",
+            )
+            st.caption(
+                "Only DNA's write/replacement cost depends on the synthesis price, so its lifecycle "
+                "cost is exactly linear in that one input — each break-even price is solved directly "
+                "from the two totals, not searched for. “Not reachable” (✕) means DNA's sequencing "
+                "and retrieval costs alone already exceed that technology's lifecycle cost, so no "
+                "synthesis price, not even $0/MB, would close the gap. Hover a bar or marker for the "
+                "exact numbers."
+            )
+            def _breakeven_cell(breakeven: float) -> str:
+                if pd.isna(breakeven):
+                    return "Not reachable"
+                return f"${format_display_number(breakeven)}/MB"
+
+            def _direction_cell(breakeven: float, reduction_factor: float) -> str:
+                if pd.isna(breakeven):
+                    return "—"
+                if pd.isna(reduction_factor):
+                    return "Needs free synthesis"
+                if breakeven < scenario.dna_synthesis_cost_per_mb:
+                    return f"{format_display_number(reduction_factor)}x lower needed"
+                if breakeven > scenario.dna_synthesis_cost_per_mb:
+                    headroom = breakeven / scenario.dna_synthesis_cost_per_mb
+                    return f"Already cheaper ({format_display_number(headroom)}x headroom)"
+                return "At parity today"
+
+            breakeven_rows = [
+                [
+                    row["technology"],
+                    _breakeven_cell(row["breakeven_synthesis_cost_usd_per_mb"]),
+                    _direction_cell(row["breakeven_synthesis_cost_usd_per_mb"], row["reduction_factor"]),
+                ]
+                for _, row in breakeven_frame.iterrows()
+            ]
+            _themed_table(
+                ["Comparison", "Break-even synthesis cost", "Today vs. break-even"],
+                breakeven_rows,
+            )
+            _chart_downloads(
+                "breakeven",
+                breakeven_frame.to_csv(index=False).encode("utf-8"),
+                "dna-synthesis-breakeven",
+                "chart_breakeven",
+            )
+
+        st.markdown(
+            """
+            <div class="chart-divider">
+                <h3>What drives DNA's own cost</h3>
+                <p>Each bar re-runs the model with one input moved 50% below and 50% above your
+                current value (a fixed step instead, for an input currently at 0), holding every
+                other input fixed, and plots the resulting spread in DNA's lifecycle cost. Bars
+                are ranked with the biggest driver at the top and the smallest at the bottom.</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        sensitivity_frame = _cached_sensitivity(scenario, use_present_value)
+        sensitivity_figure = sensitivity_chart(sensitivity_frame, use_present_value, theme=theme)
+        _plotly_chart_with_placeholder(
+            sensitivity_figure,
+            key="chart_sensitivity",
+            filename="dna-cost-sensitivity",
+        )
+        st.caption(
+            "The dotted line marks DNA's cost at your actual inputs. A bar with no visible width "
+            "means that input has no effect on DNA's cost in this scenario — average asset size, "
+            "for example, never enters DNA's own cost formula. Hover a bar for the exact low/high "
+            "values and resulting costs."
+        )
+        _chart_downloads(
+            "sensitivity",
+            sensitivity_frame.to_csv(index=False).encode("utf-8"),
+            "dna-cost-sensitivity",
+            "chart_sensitivity",
         )
 
 with assumptions_tab:
