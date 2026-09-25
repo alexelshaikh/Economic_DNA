@@ -13,7 +13,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
     output.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel=channel, headless=True)
-        context = browser.new_context(viewport={"width": 1440, "height": 1000})
+        context = browser.new_context(viewport={"width": 1440, "height": 1000}, color_scheme="light")
         page = context.new_page()
         errors = []
         sent_frames = []
@@ -29,6 +29,8 @@ def check(url: str, output: Path, channel: str | None) -> None:
             return page.locator(f'.st-key-cost-rail [data-testid="stRadioOption"]:has(input[value="{index}"])')
 
         def tab(label, chart):
+            if model(0).is_visible():
+                model(0).click()
             page.get_by_role("tab", name=label, exact=True).click()
             expect(page.locator(f".st-key-chart_{chart} .js-plotly-plot")).to_be_visible()
 
@@ -41,8 +43,36 @@ def check(url: str, output: Path, channel: str | None) -> None:
                 "Recalculate to update charts." if changed else "Charts up to date"
             )
 
+        def check_initial_model_costs(current):
+            for key, value in {
+                "dna_synthesis_cost": "16573.83854",
+                "dna_sequencing_cost": "0.1347573487",
+                "amazon_storage_per_tb_month": "0.966797",
+                "azure_storage_per_tb_month": "1.953125",
+                "tape_media_per_tb": "6.39",
+                "tape_hardware_per_tb": "6.86",
+            }.items():
+                expect(current.locator(f".st-key-{key} input")).to_have_value(re.compile(re.escape(value) + r"0*$"))
+
+        def check_navigation(current):
+            tabs = current.get_by_role("tab")
+            expect(tabs).to_have_count(6)
+            expect(current.locator('[role="tab"][aria-selected="true"]')).to_have_css("background-color", "rgb(8, 127, 140)")
+            assert tabs.evaluate_all("""elements => elements.every(tab => {
+                const rect = tab.getBoundingClientRect();
+                const list = tab.closest('[role="tablist"]').getBoundingClientRect();
+                const text = tab.querySelector('p').getBoundingClientRect();
+                return rect.height >= 48 && rect.left >= list.left - 1 && rect.right <= list.right + 1
+                    && rect.bottom <= list.bottom + 1 && text.left >= rect.left && text.right <= rect.right;
+            })"""), "Analysis tabs are clipped or too small"
+            for control in current.locator('.st-key-cost-rail label:visible').all():
+                assert control.bounding_box()["height"] >= 44
+                expect(control).to_have_css("border-top-width", "1px")
+
         page.wait_for_function("window.__dnaFormControls !== undefined")
+        check_initial_model_costs(page)
         pending(False)
+        check_navigation(page)
         initial_frames = len(sent_frames)
         chart = page.locator(".st-key-chart_lifecycle .js-plotly-plot")
         chart.evaluate("e => e.dataset.inputActionCheck = 'original'")
@@ -66,7 +96,13 @@ def check(url: str, output: Path, channel: str | None) -> None:
         button("global_reset").click()
         pending(False)
         model(1).click()
+        expect(model(1).locator("p")).to_have_css("color", "rgb(255, 255, 255)")
         synthesis = page.get_by_label("Synthesis cost (USD/MB)", exact=True)
+        for field in ("dna_synthesis_cost", "dna_sequencing_cost"):
+            for suffix in ("div10", "mul10"):
+                button(f"{field}_{suffix}").hover()
+                page.wait_for_timeout(600)
+                expect(page.get_by_role("tooltip")).to_have_count(0)
         synthesis.fill("123")
         button("dna_synthesis_cost_div10").click()
         expect(synthesis).to_have_value("12.3")
@@ -121,6 +157,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
         expander = page.locator('[data-testid="stExpander"] summary')
         expect(expander).to_have_css("background-color", "rgb(27, 30, 35)")
         expect(expander.locator("p")).to_have_css("color", "rgb(233, 237, 242)")
+        check_navigation(page)
         page.mouse.move(400, 80)
         shot("dark")
         button("theme_toggle").click()
@@ -172,12 +209,28 @@ def check(url: str, output: Path, channel: str | None) -> None:
         pending(False)
         expect(page.locator("[data-testid=stMetricValue]").first).to_have_text("1 TB")
 
+        dark = browser.new_page(viewport={"width": 1440, "height": 1000}, color_scheme="dark")
+        dark.on("pageerror", lambda error: errors.append(str(error)))
+        dark.goto(url)
+        expect(dark.locator(".theme-dark")).to_be_attached()
+        expect(dark.locator(".js-plotly-plot")).to_have_count(2)
+        dark.wait_for_function("window.__dnaFormControls !== undefined")
+        check_initial_model_costs(dark)
+        expect(dark.locator(".pending-notice")).to_have_text("Charts up to date")
+        dark.locator(".st-key-calculate_header button:visible").click()
+        expect(dark).to_have_url(re.compile(r"dna_synthesis_cost_per_mb=16573"))
+        check_initial_model_costs(dark)
+        shot("first-visit-dark", dark)
+        dark.close()
+
         for width in (768, 390, 320):
             mobile = browser.new_page(viewport={"width": width, "height": 900}, is_mobile=True, has_touch=True)
             mobile.on("pageerror", lambda error: errors.append(str(error)))
             mobile.goto(url)
             expect(mobile.locator(".js-plotly-plot")).to_have_count(2)
+            check_initial_model_costs(mobile)
             mobile.wait_for_timeout(300)
+            check_navigation(mobile)
             shot(f"viewport-{width}", mobile)
             assert mobile.locator('[data-testid="stMain"]').evaluate("e => e.scrollWidth <= e.clientWidth + 1")
             if width == 390:

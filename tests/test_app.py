@@ -40,6 +40,41 @@ class StreamlitAppTests(unittest.TestCase):
                 self.assertEqual(config["displayed"][widget.key], float(widget.proto.format % widget.value))
         self.assertEqual(config["committed"], app.session_state["committed_widgets"])
 
+    def test_model_widgets_start_with_real_defaults_in_the_browser_payload(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        defaults = app.session_state["model_input_defaults"]
+        self.assertEqual(len(defaults), 34)
+        for key, value in defaults.items():
+            with self.subTest(key=key):
+                widget = app.number_input(key=key)
+                self.assertEqual(widget.value, value)
+                self.assertEqual(widget.proto.default, value)
+                self.assertFalse(widget.proto.set_value)
+        self.assertEqual(defaults["dna_synthesis_cost"], Scenario().dna_synthesis_cost_per_mb)
+        self.assertEqual(defaults["amazon_storage_per_tb_month"], Scenario().amazon_storage_usd_per_mb_month * 1_000_000)
+
+    def test_initial_model_defaults_do_not_overwrite_user_edits(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        baseline = dict(app.session_state["model_input_defaults"])
+        app.number_input(key="dna_synthesis_cost").set_value(0.0)
+        app.number_input(key="amazon_storage_per_tb_month").set_value(12.5)
+        self._submit_form(app)
+        app.run()
+        self._open_tab(app, "Sensitivity")
+        self.assertFalse(app.exception)
+        self.assertEqual(app.number_input(key="dna_synthesis_cost").value, 0.0)
+        self.assertEqual(app.number_input(key="amazon_storage_per_tb_month").value, 12.5)
+        self.assertEqual(app.session_state["model_input_defaults"], baseline)
+
+    def test_shared_model_prices_are_initial_widget_defaults(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20)
+        app.query_params["dna_synthesis_cost_per_mb"] = "0"
+        app.query_params["tape_media_usd_per_tb"] = "12.5"
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.number_input(key="dna_synthesis_cost").proto.default, 0.0)
+        self.assertEqual(app.number_input(key="tape_media_per_tb").proto.default, 12.5)
+
     def test_pending_reference_changes_only_after_calculate(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
         before = self._form_config(app)["committed"]
@@ -332,6 +367,13 @@ class StreamlitAppTests(unittest.TestCase):
             with self.subTest(key=key):
                 widget = app.number_input(key=key)
                 self.assertRegex(widget.proto.format, r"^%\.\d+g$")
+
+    def test_dna_cost_steppers_have_no_obscuring_tooltips(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        for field in ("dna_synthesis_cost", "dna_sequencing_cost"):
+            for suffix in ("div10", "mul10"):
+                with self.subTest(field=field, suffix=suffix):
+                    self.assertFalse(app.button(key=f"{field}_{suffix}").proto.help)
 
     def test_setting_a_very_small_synthesis_cost_is_preserved_through_calculate(self):
         # Regression check for the format-only display issue: the committed
