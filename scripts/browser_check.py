@@ -44,6 +44,22 @@ def check(url: str, output: Path, channel: str | None) -> None:
                 "Recalculate to update charts." if changed else "Charts up to date"
             )
 
+        def select_chart_option(label, option, current=page):
+            current.get_by_role("combobox", name=label, exact=True).click()
+            current.get_by_role("option", name=option, exact=True).click()
+
+        def frame_viability(current=page):
+            current.locator(".st-key-viability_driver").evaluate("e => e.scrollIntoView({block: 'start'})")
+            current.locator('[data-testid="stMain"]').evaluate("e => e.scrollBy(0, -90)")
+            current.mouse.move(0, 0)
+
+        def wait_for_viability_theme(theme, current=page):
+            color = "#17191d" if theme == "dark" else "#ffffff"
+            current.wait_for_function("color => document.querySelector('.st-key-chart_viability .js-plotly-plot')?.layout.plot_bgcolor === color", arg=color)
+            expect(current.locator(".st-key-viability_driver").get_by_text("Cost driver", exact=True)).to_have_css(
+                "color", "rgb(233, 237, 242)" if theme == "dark" else "rgb(32, 38, 45)"
+            )
+
         def check_initial_model_costs(current):
             for key, value in {
                 "dna_synthesis_cost": "16573.83854",
@@ -165,6 +181,10 @@ def check(url: str, output: Path, channel: str | None) -> None:
         expect(header).to_have_attribute("data-stability-check", "original")
         shot("cost-panel")
         tab("Sensitivity", "breakeven")
+        expect(page.locator(".st-key-chart_viability .js-plotly-plot")).to_be_visible()
+        select_chart_option("Compare DNA with", "Tape On-premise")
+        pending(True)
+        expect(page.locator("[data-testid=stMetricValue]").first).to_have_text("1 TB")
         expect(header).to_have_attribute("data-stability-check", "original")
         expect(page.get_by_label("Archive size", exact=True)).to_have_value(re.compile(r"2(?:\.0+)?"))
         button("calculate_header").click()
@@ -206,12 +226,44 @@ def check(url: str, output: Path, channel: str | None) -> None:
         expect(page.locator(".contract-table").first).not_to_contain_text("Not reachable")
         expect(page.locator(".st-key-chart_breakeven .barlayer .point")).to_have_count(3)
         shot("preservation-sensitivity")
-        for file_format in ("csv", "png", "svg"):
-            with page.expect_download(timeout=15000) as download:
-                button(f"download_breakeven_{file_format}").click()
-            target = output / download.value.suggested_filename
-            download.value.save_as(target)
-            assert target.stat().st_size > 100, target
+        viability = page.locator(".st-key-chart_viability .js-plotly-plot")
+        expect(viability.locator(".annotation-text")).to_have_count(1)
+        assert viability.evaluate("e => e.layout.yaxis.range[0] < 0 && e.layout.yaxis.range[1] > 0")
+        assert viability.evaluate("e => e.data[0].y.some(y => y > 0) && e.data[1].y.some(y => y < 0)")
+        frame_viability()
+        expect(page.locator(".viability-summary")).to_contain_text("123 $/MB")
+        expect(page.locator(".viability-summary .katex")).to_have_count(0)
+        shot("viability-break-even")
+        button("theme_toggle").click()
+        expect(page.locator(".theme-dark")).to_be_attached()
+        expect(viability.locator(".annotation-text")).to_have_count(1)
+        wait_for_viability_theme("dark")
+        frame_viability()
+        shot("viability-break-even-dark")
+        button("theme_toggle").click()
+        expect(page.locator(".theme-light")).to_be_attached()
+        wait_for_viability_theme("light")
+        page.get_by_text("Focus on break-even", exact=True).click()
+        page.wait_for_function("document.querySelector('.st-key-chart_viability .js-plotly-plot')?.data.some(t => t.name === 'Current inputs')")
+        select_chart_option("Cost driver", "Discount rate")
+        expect(viability.locator(".ytitle")).to_contain_text("Present-value gain")
+        tab("Lifecycle", "lifecycle")
+        tab("Sensitivity", "viability")
+        expect(page.get_by_role("combobox", name="Cost driver", exact=True)).to_have_value("Discount rate")
+        expect(page.get_by_label("Focus on break-even", exact=True)).not_to_be_checked()
+        select_chart_option("Cost driver", "Synthesis cost")
+        page.get_by_text("Focus on break-even", exact=True).click()
+        expect(viability.locator(".annotation-text")).to_have_count(1)
+        for chart_name in ("viability", "breakeven"):
+            for file_format in ("csv", "png", "svg"):
+                with page.expect_download(timeout=15000) as download:
+                    button(f"download_{chart_name}_{file_format}").click()
+                target = output / download.value.suggested_filename
+                download.value.save_as(target)
+                assert target.stat().st_size > 100, target
+                if chart_name == "viability" and file_format == "csv":
+                    assert "gain_usd" in target.read_text(encoding="utf-8")
+        preservation_url = page.url
         shared = context.new_page()
         shared.goto(page.url)
         expect(shared.locator("[data-testid=stMetricValue]").first).to_have_text("1K TB")
@@ -345,6 +397,28 @@ def check(url: str, output: Path, channel: str | None) -> None:
                 expect(mobile.locator('[data-testid="stSidebar"]')).to_have_attribute("aria-expanded", "false")
                 mobile.wait_for_timeout(300)
                 shot(f"mobile-dark-{width}", mobile)
+            mobile.goto(preservation_url)
+            expect(mobile.locator(".js-plotly-plot")).to_have_count(2)
+            mobile.get_by_role("tab", name="Sensitivity", exact=True).click()
+            mobile_viability = mobile.locator(".st-key-chart_viability .js-plotly-plot")
+            expect(mobile_viability.locator(".annotation-text")).to_have_count(1)
+            frame_viability(mobile)
+            assert mobile.locator('[data-testid="stMain"]').evaluate("e => e.scrollWidth <= e.clientWidth + 1")
+            assert mobile_viability.evaluate("e => {const r=e.getBoundingClientRect(); return [...e.querySelectorAll('.annotation-text')].every(a => {const b=a.getBoundingClientRect(); return b.left >= r.left && b.right <= r.right;});}"), "Viability label extends outside the chart"
+            assert mobile_viability.evaluate("e => {const legend=e.querySelector('.legend').getBoundingClientRect(); const plot=e.querySelector('.nsewdrag').getBoundingClientRect(); return legend.top >= plot.bottom;}")
+            assert mobile_viability.evaluate("e => e.querySelector('.legend').getBoundingClientRect().bottom <= e.getBoundingClientRect().bottom"), "Viability legend is clipped"
+            if width <= 640:
+                driver_bounds = mobile.locator(".st-key-viability_driver").bounding_box()
+                comparison_bounds = mobile.locator(".st-key-viability_comparison").bounding_box()
+                assert comparison_bounds["y"] >= driver_bounds["y"] + driver_bounds["height"], "Mobile comparison controls did not stack"
+            shot(f"viability-{width}", mobile)
+            select_chart_option("Compare DNA with", "Tape On-premise", mobile)
+            mobile.locator('.st-key-theme_toggle button:visible').click()
+            expect(mobile.locator(".theme-dark")).to_be_attached()
+            expect(mobile_viability.locator(".annotation-text")).to_have_count(1)
+            wait_for_viability_theme("dark", mobile)
+            frame_viability(mobile)
+            shot(f"viability-dark-{width}", mobile)
             mobile.close()
         assert not errors, errors
         browser.close()

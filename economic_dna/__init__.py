@@ -4,6 +4,7 @@ from .historical import load_observed_sequencing_costs, synthesis_historical_tre
 from .presets import PRESET_SCENARIOS
 from .scenario import Scenario
 from .sensitivity import DNA_SENSITIVITY_PARAMETERS, dna_cost_sensitivity
+from .viability import ViabilityResult, dna_cost_advantage
 from .simulation import (
     TECHNOLOGIES,
     SimulationResult,
@@ -30,6 +31,8 @@ __all__ = [
     "find_lifecycle_crossovers",
     "find_breakeven_synthesis_cost",
     "dna_cost_sensitivity",
+    "dna_cost_advantage",
+    "ViabilityResult",
     "load_observed_sequencing_costs",
     "synthesis_historical_trend",
 ]

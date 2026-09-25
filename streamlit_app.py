@@ -12,9 +12,11 @@ from streamlit.delta_generator_singletons import get_dg_singleton_instance
 from streamlit.elements.lib.form_utils import FormData as _FormData
 
 from economic_dna import (
+    DNA_SENSITIVITY_PARAMETERS,
     PRESET_SCENARIOS,
     Scenario,
     dna_cost_sensitivity,
+    dna_cost_advantage,
     find_breakeven_synthesis_cost,
     find_crossover_years,
     find_lifecycle_crossovers,
@@ -35,6 +37,7 @@ from economic_dna.visualization import (
     palette_for,
     projection_chart,
     sensitivity_chart,
+    viability_chart,
 )
 
 
@@ -778,6 +781,11 @@ def _cached_uncertainty_band(scenario: Scenario, use_present_value: bool) -> pd.
 @st.cache_data(show_spinner=False, max_entries=32)
 def _cached_sensitivity(scenario: Scenario, use_present_value: bool) -> pd.DataFrame:
     return dna_cost_sensitivity(scenario, use_present_value)
+
+
+@st.cache_data(show_spinner=False, max_entries=16, ttl=600)
+def _cached_viability(scenario: Scenario, field: str, comparison: str, use_present_value: bool, focus: bool):
+    return dna_cost_advantage(scenario, field, comparison, use_present_value, focus=focus)
 
 
 @st.cache_data(show_spinner=False, max_entries=32)
@@ -1739,6 +1747,61 @@ def _render_analysis() -> None:
 
     if sensitivity_tab.open:
         with sensitivity_tab:
+            comparisons = [technology for technology in scenario.technologies if technology != "DNA"]
+            if "DNA" in scenario.technologies and comparisons:
+                _section_intro(
+                    "DNA cost advantage",
+                    "Comparison cost minus DNA cost over the archive lifetime. Positive means DNA costs less; "
+                    "negative means DNA costs more. Shared workload changes apply to both models.",
+                )
+                driver_specs = {spec.field: spec for spec in DNA_SENSITIVITY_PARAMETERS}
+                driver_fields = list(driver_specs)
+                with st.container(key="viability-controls"):
+                    driver_column, comparison_column = st.columns(2)
+                    with driver_column:
+                        saved_driver = st.session_state.get("saved_viability_driver", driver_fields[0])
+                        driver = st.selectbox(
+                            "Cost driver", driver_fields,
+                            index=driver_fields.index(saved_driver) if saved_driver in driver_fields else 0,
+                            format_func=lambda field: driver_specs[field].label,
+                            key="viability_driver", on_change=_remember_chart_option, args=("viability_driver",),
+                        )
+                    with comparison_column:
+                        saved_comparison = st.session_state.get("saved_viability_comparison", comparisons[0])
+                        comparison = st.selectbox(
+                            "Compare DNA with", comparisons,
+                            index=comparisons.index(saved_comparison) if saved_comparison in comparisons else 0,
+                            format_func=lambda key: scenario.custom_storage_name if key == "Custom storage" else key,
+                            key="viability_comparison", on_change=_remember_chart_option, args=("viability_comparison",),
+                        )
+                focus = st.toggle(
+                    "Focus on break-even", value=st.session_state.get("saved_viability_focus", True),
+                    key="viability_focus", on_change=_remember_chart_option, args=("viability_focus",),
+                )
+                try:
+                    viability = _cached_viability(scenario, driver, comparison, use_present_value, focus)
+                except ValueError as error:
+                    st.warning(str(error))
+                else:
+                    spec = viability.parameter
+                    sign = "-" if viability.current_gain < 0 else "+"
+                    price_year = f" ({scenario.dna_cost_base_year} price)" if spec.unit == "$/MB" else ""
+                    gain_label = "DNA present-value gain" if viability.use_present_value else "DNA gain"
+                    summary = (
+                        f"Current {spec.label.lower()}{price_year}: {format_display_number(viability.current_value)} {spec.unit}. "
+                        f"{gain_label} vs. {viability.comparison}: {sign}${format_display_number(abs(viability.current_gain))}."
+                    )
+                    st.html(f'<p class="viability-summary">{html.escape(summary)}</p>')
+                    _render_chart(viability_chart(viability, theme), key="chart_viability", filename="dna-cost-advantage")
+                    if not viability.crossings:
+                        if (viability.curve["gain_usd"] == 0).all():
+                            st.caption("Equal cost throughout the sampled range.")
+                        else:
+                            st.caption("No break-even crossing in the sampled range.")
+                    if viability.curve["gain_usd"].isna().any():
+                        st.caption("Gaps indicate assumptions outside the model's numeric range.")
+                    _chart_downloads("viability", viability.curve, "dna-cost-advantage", "chart_viability")
+
             _section_intro(
                 "Synthesis price needed to break even",
                 f"Maximum synthesis price in {scenario.dna_cost_base_year} at which DNA matches each "

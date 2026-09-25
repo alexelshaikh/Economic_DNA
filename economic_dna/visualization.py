@@ -7,6 +7,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from .simulation import COMPONENTS, SimulationResult
+from .viability import ViabilityResult
 
 
 PALETTES = {
@@ -668,6 +669,87 @@ def sensitivity_chart(
         showlegend=False,
     )
     return style_figure(figure, theme)
+
+
+def viability_chart(result: ViabilityResult, theme: str = DEFAULT_THEME) -> go.Figure:
+    palette = palette_for(theme)["figure"]
+    frame = result.curve
+    xs = frame["parameter_value"].to_numpy()
+    gains = frame["gain_usd"].to_numpy(copy=True)
+    for crossing in result.crossings:
+        if not crossing.discrete:
+            gains[xs == crossing.value] = 0.0
+    figure = go.Figure()
+    unit = result.parameter.unit.replace("$", "USD")
+    hover = [
+        f"{escape(result.parameter.label)}: {format_display_number(row.parameter_value)} {escape(unit)}<br>"
+        f"DNA: ${format_display_number(row.dna_cost_usd)}<br>"
+        f"{escape(result.comparison)}: ${format_display_number(row.comparison_cost_usd)}<br>"
+        f"DNA gain: {'-' if row.gain_usd < 0 else '+'}${format_display_number(abs(row.gain_usd))}"
+        if math.isfinite(row.gain_usd) else "Outside numeric range"
+        for row in frame.itertuples()
+    ]
+    discrete = result.parameter.field == "dna_durability_years"
+    for positive, color, name in (
+        (True, technology_color("Azure Blob Archive", theme), "DNA costs less"),
+        (False, technology_color("DNA", theme), "DNA costs more"),
+    ):
+        values = [float(g) if math.isfinite(g) and (g >= 0 if positive else g <= 0) else None for g in gains]
+        figure.add_trace(go.Scatter(
+            x=xs, y=values, mode="lines", name=name, line={"color": color, "width": 3, "shape": "hv" if discrete else "linear"},
+            fill="tozeroy", fillcolor=color + "18", connectgaps=False,
+            hovertext=hover, hovertemplate="%{hovertext}<extra></extra>",
+        ))
+    figure.add_hline(y=0, line={"color": palette["axis_title_color"], "width": 1.5})
+    low, high = float(xs.min()), float(xs.max())
+    for index, crossing in enumerate(result.crossings):
+        position = (crossing.value - low) / (high - low) if high > low else 0.5
+        anchor = "left" if position < 0.3 else "right" if position > 0.7 else "center"
+        figure.add_vline(x=crossing.value, line={"color": palette["axis_title_color"], "width": 1.5, "dash": "dash"})
+        figure.add_annotation(
+            x=crossing.value, y=1.0 - index * 0.1, yref="paper", showarrow=False,
+            text=f"{'Cost flips' if crossing.discrete else 'Break-even'}: {format_display_number(float(f'{crossing.value:.3g}'))}",
+            hovertext=f"{format_display_number(crossing.value)} {escape(unit)}" + ("<br>Discrete durability step, not exact cost equality" if crossing.discrete else "<br>Equal lifecycle costs"),
+            xanchor=anchor, xshift=6 if anchor == "left" else -6 if anchor == "right" else 0,
+            bgcolor=palette["plot_bgcolor"], font={"size": 11, "color": palette["font_color"]},
+        )
+        marker_gain = float(frame.loc[frame["parameter_value"] == crossing.value, "gain_usd"].iloc[0]) if crossing.discrete else 0
+        figure.add_trace(go.Scatter(
+            x=[crossing.value], y=[marker_gain], mode="markers", showlegend=False, hoverinfo="skip",
+            marker={"size": 9, "color": palette["plot_bgcolor"], "line": {"color": palette["axis_title_color"], "width": 2}},
+        ))
+    if low <= result.current_value <= high:
+        figure.add_trace(go.Scatter(
+            x=[result.current_value], y=[result.current_gain], mode="markers", name="Current inputs",
+            marker={"symbol": "diamond", "size": 10, "color": palette["font_color"]},
+            hovertext=f"Current {escape(result.parameter.label.lower())}: {format_display_number(result.current_value)} {escape(unit)}",
+            hovertemplate="%{hovertext}<extra></extra>",
+        ))
+    finite_gains = [float(value) for value in gains if math.isfinite(value)]
+    minimum, maximum = min(0.0, *finite_gains), max(0.0, *finite_gains)
+    span = maximum - minimum or 1.0
+    raw_step = span / 6
+    magnitude = 10.0 ** math.floor(math.log10(raw_step))
+    step = next((m * magnitude for m in _LINEAR_STEP_MULTIPLIERS if raw_step <= m * magnitude), 10 * magnitude)
+    ticks = [i * step for i in range(math.floor(minimum / step), math.ceil(maximum / step) + 1)]
+    labels = _tick_labels([abs(tick) for tick in ticks])
+    figure.update_yaxes(
+        tickvals=ticks, ticktext=[("-" if tick < 0 else "") + label for tick, label in zip(ticks, labels)],
+        range=[minimum - span * 0.05, maximum + span * 0.1],
+    )
+    x_ticks, _ = _linear_ticks(low, high, low == 0)
+    if x_ticks:
+        figure.update_xaxes(tickvals=x_ticks, ticktext=_tick_labels(x_ticks))
+    figure.update_layout(
+        title="DNA cost advantage",
+        xaxis_title=f"{result.parameter.label} ({unit})",
+        yaxis_title="Present-value gain (USD)" if result.use_present_value else "Lifecycle cost gain (USD)",
+        hovermode="x unified", height=480, legend={"orientation": "h", "x": 0},
+        margin={"l": 12, "r": 12, "t": 60, "b": 100},
+    )
+    style_figure(figure, theme)
+    figure.update_layout(margin={"b": 140}, legend={"y": -0.25})
+    return figure
 
 
 def breakeven_chart(

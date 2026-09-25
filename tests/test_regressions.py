@@ -157,14 +157,14 @@ class AppRegressions(unittest.TestCase):
     def test_inactive_views_do_not_compute_and_csv_is_deferred(self):
         import streamlit as st
         st.cache_data.clear()
-        with patch("economic_dna.simulate_start_years", side_effect=AssertionError("Hidden outlook ran")), patch("economic_dna.dna_cost_sensitivity", side_effect=AssertionError("Hidden sensitivity ran")), patch("pandas.DataFrame.to_csv", side_effect=AssertionError("CSV was generated before download")):
+        with patch("economic_dna.simulate_start_years", side_effect=AssertionError("Hidden outlook ran")), patch("economic_dna.dna_cost_sensitivity", side_effect=AssertionError("Hidden sensitivity ran")), patch("economic_dna.dna_cost_advantage", side_effect=AssertionError("Hidden viability ran")), patch("pandas.DataFrame.to_csv", side_effect=AssertionError("CSV was generated before download")):
             app = self.app().run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.get("plotly_chart")), 2)
 
     def test_all_analysis_views_render_on_demand(self):
         app = self.app().run()
-        for label, count in (("Start-year outlook", 1), ("DNA unit costs", 2), ("Sensitivity", 2), ("Assumptions", 0), ("About", 0), ("Lifecycle", 2)):
+        for label, count in (("Start-year outlook", 1), ("DNA unit costs", 2), ("Sensitivity", 3), ("Assumptions", 0), ("About", 0), ("Lifecycle", 2)):
             test_app.StreamlitAppTests._open_tab(app, label)
             self.assertFalse(app.exception, label)
             self.assertEqual(len(app.get("plotly_chart")), count, label)

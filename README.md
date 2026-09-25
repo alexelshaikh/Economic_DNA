@@ -28,6 +28,14 @@ Presets populate workload inputs; press Calculate to update the results. Other e
 assumptions are retained. Changed inputs are highlighted and Calculate becomes **Update charts**
 until a successful calculation, or until the inputs match the last calculation again.
 
+The Sensitivity tab also includes **DNA cost advantage**: select any of the nine DNA cost
+drivers and an active comparison model. Its signed gain is the comparison's lifecycle cost
+minus DNA's lifecycle cost, so positive values favor DNA. Shared workload changes affect
+both models; all other assumptions stay fixed. Price drivers refer to the DNA cost base year.
+The default view focuses on break-even; switch off **Focus on break-even** to include the
+current input. Dashed markers identify equal-cost crossings, or discrete cost flips for
+whole-year durability. Some scenarios have no crossing within the sampled range.
+
 Default prices, price base years, and durability values are read from `assumptions.yaml` when
 the process starts. Restart the app after editing that file. The historical fits and editable
 DNA prices remain separate assumptions; a workload preset does not change those prices.
@@ -44,7 +52,9 @@ on download; PNG and SVG images are exported in the browser. The largest shared 
 is limited to eight scenarios with a ten-minute expiry.
 
 Start-year projections reuse each cost stream's decline factor, sensitivity evaluates only
-DNA costs, and uncertainty sampling processes 256 years at a time. The Docker image disables
+DNA costs (plus the selected alternative for cost-advantage sweeps), and uncertainty sampling
+processes 256 years at a time. Cost-advantage sweeps use bounded samples and a bounded cache;
+synthesis and sequencing price thresholds are solved analytically. The Docker image disables
 file watching, limits numeric-library threads to one, and enables WebSocket compression.
 These settings reduce per-user work and memory use; actual concurrent capacity depends on
 the server and workloads.

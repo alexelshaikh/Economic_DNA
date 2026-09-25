@@ -352,6 +352,7 @@ class StreamlitAppTests(unittest.TestCase):
         self._open_tab(app, "Sensitivity")
         self.assertFalse(app.exception)
         chart_keys = {chart.key for chart in app.get("plotly_chart")}
+        self.assertIn("chart_viability", chart_keys)
         self.assertIn("chart_breakeven", chart_keys)
         self.assertIn("chart_sensitivity", chart_keys)
         table_html = " ".join(markdown.value or "" for markdown in app.markdown)
@@ -372,11 +373,54 @@ class StreamlitAppTests(unittest.TestCase):
         self._open_tab(app, "Sensitivity")
         self.assertFalse(app.exception)
         chart_keys = {chart.key for chart in app.get("plotly_chart")}
+        self.assertNotIn("chart_viability", chart_keys)
         self.assertNotIn("chart_breakeven", chart_keys)
         self.assertNotIn("chart_sensitivity", chart_keys)
         self.assertTrue(
             any("break-even price" in (info.value or "") for info in app.info)
         )
+
+    def test_viability_options_persist_without_committing_pending_inputs(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self._open_tab(app, "Sensitivity")
+        committed = dict(app.session_state["committed_widgets"])
+        app.number_input(key="archive_value").set_value(2.0)
+        app.selectbox(key="viability_driver").select("discount_rate_percent")
+        self._open_tab(app, "Sensitivity")
+        app.selectbox(key="viability_comparison").select("Tape On-premise")
+        self._open_tab(app, "Sensitivity")
+        app.toggle(key="viability_focus").set_value(False)
+        self._open_tab(app, "Sensitivity")
+        self.assertFalse(app.exception)
+        self.assertEqual(app.session_state["committed_widgets"], committed)
+        self.assertEqual(app.number_input(key="archive_value").value, 2.0)
+        chart = next(c for c in app.get("plotly_chart") if c.key == "chart_viability")
+        layout = json.loads(chart.proto.spec)["layout"]
+        self.assertIn("Present-value", layout["yaxis"]["title"]["text"])
+        self._open_tab(app, "Lifecycle")
+        self._open_tab(app, "Sensitivity")
+        self.assertFalse(app.exception)
+        self.assertEqual(app.selectbox(key="viability_driver").value, "discount_rate_percent")
+        self.assertEqual(app.selectbox(key="viability_comparison").value, "Tape On-premise")
+        self.assertFalse(app.toggle(key="viability_focus").value)
+
+    def test_viability_comparison_falls_back_when_model_is_removed(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self._open_tab(app, "Sensitivity")
+        app.selectbox(key="viability_comparison").select("Tape On-premise")
+        self._open_tab(app, "Sensitivity")
+        app.checkbox(key="tech_tape").uncheck()
+        self._submit_form(app)
+        self._open_tab(app, "Sensitivity")
+        self.assertFalse(app.exception)
+        self.assertEqual(app.selectbox(key="viability_comparison").value, "Amazon Deep Archive")
+        self.assertIn("chart_viability", {c.key for c in app.get("plotly_chart")})
+        for key in ("tech_amazon", "tech_azure"):
+            app.checkbox(key=key).uncheck()
+        self._submit_form(app)
+        self._open_tab(app, "Sensitivity")
+        self.assertFalse(app.exception)
+        self.assertNotIn("chart_viability", {c.key for c in app.get("plotly_chart")})
 
     def test_uncertainty_band_checkbox_is_only_offered_when_dna_is_selected(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
