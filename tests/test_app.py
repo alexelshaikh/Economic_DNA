@@ -336,6 +336,17 @@ class StreamlitAppTests(unittest.TestCase):
             baseline.dna_synthesis_cost_per_mb,
         )
 
+    def test_outlook_passes_the_same_crossover_years_to_chart_and_table(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self._open_tab(app, "Start-year outlook")
+        self.assertFalse(app.exception)
+        chart = next(chart for chart in app.get("plotly_chart") if chart.key == "chart_projection")
+        layout = json.loads(chart.proto.spec)["layout"]
+        self.assertEqual([shape["x0"] for shape in layout["shapes"]], [2332, 2321, 2149])
+        table = " ".join(markdown.value or "" for markdown in app.markdown)
+        for annotation in layout["annotations"]:
+            self.assertIn(str(annotation["x"]), table)
+
     def test_sensitivity_tab_shows_breakeven_table_and_tornado_chart(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
         self._open_tab(app, "Sensitivity")

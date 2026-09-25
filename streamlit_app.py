@@ -1615,7 +1615,10 @@ def _render_analysis() -> None:
                 "start year. A crossover is the first start year for which DNA's lifecycle cost is no greater "
                 "than the comparison technology.",
             )
-            projection_figure = projection_chart(projection, use_present_value, log_scale, theme=theme)
+            crossovers = find_crossover_years(projection)
+            projection_figure = projection_chart(
+                projection, use_present_value, log_scale, theme=theme, crossovers=crossovers,
+            )
             _render_chart(
                 projection_figure,
                 key="chart_projection",
@@ -1636,7 +1639,6 @@ def _render_analysis() -> None:
                 """,
                 unsafe_allow_html=True,
             )
-            crossovers = find_crossover_years(projection)
             if crossovers:
                 crossover_rows = [
                     {

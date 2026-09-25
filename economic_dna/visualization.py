@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from html import escape
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -299,6 +300,38 @@ def _add_terminal_dot(
     )
 
 
+def _add_crossover_markers(
+    figure: go.Figure, crossovers: dict[str, int | None] | None, theme: str
+) -> None:
+    if not crossovers or not figure.data:
+        return
+    years = [year for trace in figure.data for year in trace.x]
+    midpoint = (min(years) + max(years)) / 2
+    short_names = {
+        "Amazon Deep Archive": "Amazon", "Azure Blob Archive": "Azure",
+        "Tape On-premise": "Tape", "Custom storage": "Custom",
+    }
+    surface = palette_for(theme)["figure"]["plot_bgcolor"]
+    for index, (technology, year) in enumerate(
+        (technology, year) for technology, year in crossovers.items() if year is not None
+    ):
+        color = technology_color(technology, theme)
+        name = short_names.get(technology, technology)
+        if len(name) > 18:
+            name = name[:15] + "..."
+        on_right = year > midpoint
+        figure.add_vline(x=year, line={"color": color, "width": 1.5, "dash": "dash"})
+        # Stagger labels and point them into the plot so nearby crossings and
+        # years near the right edge remain readable on narrow screens.
+        figure.add_annotation(
+            x=year, y=1.0 - 0.08 * index, yref="paper",
+            text=f"DNA \u2264 {escape(name)}: {year}",
+            hovertext=f"DNA \u2264 {escape(technology)}: {year}",
+            showarrow=False, font={"color": color, "size": 11}, bgcolor=surface,
+            xanchor="right" if on_right else "left", xshift=-6 if on_right else 6,
+        )
+
+
 def lifecycle_chart(
     result: SimulationResult,
     use_present_value: bool,
@@ -356,28 +389,7 @@ def lifecycle_chart(
         height=460,
     )
     _apply_cost_axis_format(figure)
-    if crossovers:
-        # Staggered annotation heights (in paper coordinates, so they land
-        # just under the legend regardless of the y axis's data range) keep
-        # 2-3 simultaneous crossover labels from overlapping.
-        for index, (technology, year) in enumerate(
-            (technology, year) for technology, year in crossovers.items() if year is not None
-        ):
-            figure.add_vline(
-                x=year,
-                line={"color": technology_color(technology, theme), "width": 1.5, "dash": "dash"},
-            )
-            figure.add_annotation(
-                x=year,
-                y=1.0 - 0.08 * index,
-                yref="paper",
-                text=f"DNA ≤ {technology}: {year}",
-                showarrow=False,
-                font={"color": technology_color(technology, theme), "size": 11},
-                bgcolor=surface,
-                xanchor="left",
-                xshift=6,
-            )
+    _add_crossover_markers(figure, crossovers, theme)
     return style_figure(figure, theme)
 
 
@@ -432,7 +444,8 @@ def breakdown_chart(result: SimulationResult, log_scale: bool, theme: str = DEFA
 
 
 def projection_chart(
-    projection: pd.DataFrame, use_present_value: bool, log_scale: bool, theme: str = DEFAULT_THEME
+    projection: pd.DataFrame, use_present_value: bool, log_scale: bool, theme: str = DEFAULT_THEME,
+    *, crossovers: dict[str, int | None] | None = None,
 ) -> go.Figure:
     value = "present_value_usd" if use_present_value else "total_cost_usd"
     surface = palette_for(theme)["figure"]["plot_bgcolor"]
@@ -466,6 +479,7 @@ def projection_chart(
         height=500,
     )
     _apply_cost_axis_format(figure)
+    _add_crossover_markers(figure, crossovers, theme)
     return style_figure(figure, theme)
 
 

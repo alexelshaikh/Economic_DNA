@@ -5,11 +5,13 @@ from economic_dna import (
     Scenario,
     dna_cost_sensitivity,
     find_breakeven_synthesis_cost,
+    find_crossover_years,
     find_lifecycle_crossovers,
     load_observed_sequencing_costs,
     simulate_dna_unit_costs,
     simulate_dna_uncertainty_band,
     simulate_scenario,
+    simulate_start_years,
     synthesis_historical_trend,
 )
 from economic_dna.visualization import (
@@ -19,6 +21,7 @@ from economic_dna.visualization import (
     dna_unit_cost_chart,
     format_display_number,
     lifecycle_chart,
+    projection_chart,
     sensitivity_chart,
 )
 
@@ -81,7 +84,8 @@ class LifecycleOverlayChartTests(unittest.TestCase):
 
         self.assertEqual(len(figure.layout.shapes), 1)
         self.assertEqual(len(figure.layout.annotations), 1)
-        self.assertIn("Tape On-premise", figure.layout.annotations[0].text)
+        self.assertIn("DNA \u2264 Tape:", figure.layout.annotations[0].text)
+        self.assertIn("Tape On-premise", figure.layout.annotations[0].hovertext)
 
     def test_no_crossover_adds_no_shapes(self):
         scenario = Scenario(technologies=("DNA", "Amazon Deep Archive"))
@@ -90,6 +94,41 @@ class LifecycleOverlayChartTests(unittest.TestCase):
         figure = lifecycle_chart(result, False, True, crossovers=crossovers)
         self.assertEqual(len(figure.layout.shapes), 0)
         self.assertEqual(len(figure.layout.annotations), 0)
+
+
+class ProjectionOverlayChartTests(unittest.TestCase):
+    def test_markers_match_crossover_table_in_both_themes_and_cost_bases(self):
+        for theme in ("light", "dark"):
+            for discount in (0.0, 3.0):
+                with self.subTest(theme=theme, discount=discount):
+                    projection = simulate_start_years(Scenario(discount_rate_percent=discount), 2350)
+                    crossovers = find_crossover_years(projection)
+                    figure = projection_chart(projection, discount > 0, True, theme, crossovers=crossovers)
+                    expected = [year for year in crossovers.values() if year is not None]
+                    self.assertEqual([shape.x0 for shape in figure.layout.shapes], expected)
+                    self.assertTrue(all(shape.x0 == shape.x1 and shape.line.dash == "dash" for shape in figure.layout.shapes))
+                    self.assertEqual([a.x for a in figure.layout.annotations], expected)
+                    self.assertTrue(all(len(a.text) < 25 for a in figure.layout.annotations))
+                    self.assertEqual(len({a.y for a in figure.layout.annotations}), len(expected))
+                    for annotation in figure.layout.annotations:
+                        if annotation.x > (2025 + 2350) / 2:
+                            self.assertEqual(annotation.xanchor, "right")
+                            self.assertLess(annotation.xshift, 0)
+
+    def test_no_reachable_crossing_or_no_dna_adds_no_markers(self):
+        for scenario in (Scenario(), Scenario(technologies=("Tape On-premise",))):
+            projection = simulate_start_years(scenario, 2027)
+            figure = projection_chart(projection, False, True, crossovers=find_crossover_years(projection))
+            self.assertFalse(figure.layout.shapes)
+            self.assertFalse(figure.layout.annotations)
+
+    def test_already_cheaper_uses_first_year_and_staggers_equal_years(self):
+        scenario = Scenario(dna_synthesis_cost_per_mb=0.0, dna_sequencing_cost_per_mb=0.0)
+        projection = simulate_start_years(scenario, 2030)
+        figure = projection_chart(projection, False, False, crossovers=find_crossover_years(projection))
+        self.assertEqual([shape.x0 for shape in figure.layout.shapes], [2025] * 3)
+        self.assertEqual(len({a.y for a in figure.layout.annotations}), 3)
+        self.assertTrue(all(a.xanchor == "left" for a in figure.layout.annotations))
 
 
 class ColorblindPatternTests(unittest.TestCase):

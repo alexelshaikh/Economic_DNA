@@ -256,7 +256,23 @@ body:has(.st-key-sidebar-advanced-toggle input:checked) [class*="st-key-advanced
     section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div { width: 100vw !important; max-width: none !important; }
     section[data-testid="stSidebar"] [data-testid="stSidebarContent"] { padding-bottom: 5rem; }
     section[data-testid="stSidebar"][aria-expanded="false"] { visibility: hidden; opacity: 0 !important; pointer-events: none !important; transform: translateX(-100vw) !important; }
-    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] { visibility: visible; }
+    section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+        position: sticky; top: 0; z-index: 10; min-height: 4rem; height: 4rem;
+        background: var(--sidebar); border-bottom: 1px solid var(--line);
+        display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0;
+    }
+    section[data-testid="stSidebar"] [data-testid="stSidebarHeader"]::before { content: "Inputs"; font-size: 1.15rem; font-weight: 650; color: var(--ink); }
+    section[data-testid="stSidebar"] [data-testid="stLogoSpacer"] { display: none; }
+    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] { visibility: visible; opacity: 1; }
+    [data-testid="stExpandSidebarButton"], section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button {
+        display: inline-flex; align-items: center; justify-content: center; gap: 0.25rem;
+        min-height: 2.75rem; padding: 0.35rem 0.55rem; border: 1px solid var(--border);
+        background: var(--surface); color: var(--ink); font-weight: 600; cursor: pointer;
+    }
+    [data-testid="stExpandSidebarButton"] { min-width: 5.25rem; }
+    [data-testid="stExpandSidebarButton"]:hover, section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button:hover { border-color: var(--accent); background: var(--accent-soft); }
+    :is([data-testid="stExpandSidebarButton"], [data-testid="stSidebarCollapseButton"]) [data-testid="stIconMaterial"] { color: var(--ink); }
+    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] button::after { content: "Close"; font-size: 0.95rem; }
     section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"] { flex-wrap: nowrap; }
     section[data-testid="stSidebar"] [data-testid="stColumn"] { min-width: 0 !important; }
     section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) { flex-direction: column; }
@@ -265,8 +281,7 @@ body:has(.st-key-sidebar-advanced-toggle input:checked) [class*="st-key-advanced
     .st-key-copy-link-anchor, .st-key-global-reset-btn { display: none; }
     .st-key-calculate-anchor { right: 6.1rem; width: 9.5rem; }
     [data-testid="stStatusWidget"] { display: none; }
-    [data-testid="stExpandSidebarButton"] { color: var(--ink); }
-    [data-testid="stExpandSidebarButton"]::after { content: "Inputs"; color: var(--ink); font-size: 0.9rem; padding-right: 0.4rem; }
+    [data-testid="stExpandSidebarButton"]::after { content: "Inputs"; color: var(--ink); font-size: 0.9rem; }
     [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"] { flex-wrap: wrap; }
     [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { min-width: 0; }
     [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]:has([data-testid="stPlotlyChart"]) > [data-testid="stColumn"] { flex: 1 1 100%; }
@@ -287,7 +302,10 @@ body:has(.st-key-sidebar-advanced-toggle input:checked) [class*="st-key-advanced
     .st-key-calculate_panel { display: block; position: sticky; bottom: -1.1rem; background: var(--surface); padding: 0.5rem 0; z-index: 2; }
 }
 @media (max-width: 360px) {
-    .st-key-calculate-anchor { right: 5.8rem; width: 8.5rem; }
+    [data-testid="stExpandSidebarButton"] { margin-left: -0.5rem; }
+    .st-key-calculate-anchor { width: 7.4rem; }
+    .st-key-calculate_header button { gap: 0; padding-inline: 0.4rem; }
+    .st-key-calculate_header button p { font-size: 0.875rem; white-space: nowrap; }
     .st-key-calculate_header [data-testid="stIconMaterial"] { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {

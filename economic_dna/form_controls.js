@@ -24,8 +24,19 @@
   let actionValues = {};
   let queue = Promise.resolve();
   let disposed = false;
+  const labelSidebarControls = () => {
+    const open = doc.querySelector('[data-testid="stExpandSidebarButton"]');
+    const close = doc.querySelector('[data-testid="stSidebarCollapseButton"] button');
+    if (open) open.setAttribute("aria-label", "Open inputs");
+    if (close) {
+      close.setAttribute("aria-label", "Close inputs");
+      const icon = close.querySelector('[data-testid="stIconMaterial"]');
+      if (icon && icon.textContent !== "close") icon.textContent = "close";
+    }
+  };
   const refresh = () => {
     frame = 0;
+    labelSidebarControls();
     let dirty = false;
     for (const key of keys) {
       const value = read(key);
@@ -107,11 +118,17 @@
     if (disposed) return;
     if (event.target.closest(fieldSelector)) schedule();
   };
+  const keydown = event => {
+    if (event.key !== "Escape" || !win.matchMedia("(max-width: 640px)").matches) return;
+    const close = doc.querySelector('[data-testid="stSidebar"][aria-expanded="true"] [data-testid="stSidebarCollapseButton"] button');
+    if (close) close.click();
+  };
   // Delegation survives Streamlit reconciling widgets after Calculate or a
   // theme change. Only one observer/listener set is retained per document.
   doc.addEventListener("click", click, true);
   doc.addEventListener("input", changed, true);
   doc.addEventListener("change", changed, true);
+  doc.addEventListener("keydown", keydown);
   const observer = new win.MutationObserver(records => {
     if (records.some(record => record.type === "childList" || (
       record.target.closest(fieldSelector)
@@ -130,6 +147,7 @@
       doc.removeEventListener("click", click, true);
       doc.removeEventListener("input", changed, true);
       doc.removeEventListener("change", changed, true);
+      doc.removeEventListener("keydown", keydown);
     },
   };
   schedule();
