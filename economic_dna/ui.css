@@ -55,6 +55,8 @@ a { color: var(--accent); }
 /* Utility elements stay out of the layout; mounted form panels keep edits. */
 [data-testid="stElementContainer"]:has(.theme-marker),
 [data-testid="stElementContainer"]:has(.form-controls-marker),
+[data-testid="stElementContainer"]:has(.analysis-navigation-marker),
+[data-testid="stElementContainer"]:has(.analysis-ready),
 [data-testid="stElementContainer"]:has([data-testid="stIFrame"]),
 .st-key-theme_auto_dark { display: none; }
 [data-testid="stLayoutWrapper"]:has(> .st-key-cost-rail),
@@ -195,6 +197,13 @@ body:has(.st-key-sidebar-advanced-toggle input:checked) [class*="st-key-advanced
 [data-testid="stMetricValue"] { font-size: 1.65rem; font-weight: 650; line-height: 1.4; color: var(--ink); }
 [data-testid="stMetricDelta"] { font-size: 0.85rem; color: var(--muted); }
 .workspace-kicker { display: none; }
+.st-key-analysis_tabs { position: relative; min-height: calc(100dvh - 6rem); }
+/* Navigation stays solid while Streamlit marks the fragment as stale. */
+.st-key-analysis_tabs [role="tablist"] { opacity: 1 !important; transition: none !important; }
+.st-key-analysis_tabs.analysis-transition [data-testid="stTabPanel"] { visibility: hidden; }
+.analysis-preview { position: absolute; left: 0; right: 0; overflow: hidden; pointer-events: none; user-select: none; }
+.analysis-preview [data-stale] { opacity: 1 !important; transition: none !important; }
+.analysis-loading-status { position: absolute; right: 0; max-width: 100%; padding: 0.2rem 0.45rem; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--muted); font-size: 0.85rem; line-height: 1.3; }
 [data-testid="stTabs"] [role="tablist"] { display: flex; flex-wrap: wrap; width: 100%; gap: 0.5rem; border-bottom: 1px solid var(--line); padding: 0 0 0.8rem; overflow: visible; margin: 0 0 0.5rem; }
 [data-testid="stTabs"] [role="tab"] { flex: 1 0 auto; padding: 0.7rem 0.85rem; color: var(--ink); background: var(--subtle); border: 1px solid var(--border); border-radius: 6px; min-height: 48px; cursor: pointer; }
 [data-testid="stTabs"] [role="tab"] p { font-size: 1rem; font-weight: 600; line-height: 1.3; }

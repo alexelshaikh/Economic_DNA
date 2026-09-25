@@ -65,6 +65,11 @@ def _form_script(modified_ns: int) -> str:
     return (Path(__file__).parent / "economic_dna" / "form_controls.js").read_text(encoding="utf-8")
 
 
+@st.cache_data(show_spinner=False, max_entries=1)
+def _analysis_script(modified_ns: int) -> str:
+    return (Path(__file__).parent / "economic_dna" / "analysis_navigation.js").read_text(encoding="utf-8")
+
+
 st.html(f"<style>{_stylesheet((Path(__file__).parent / 'economic_dna' / 'ui.css').stat().st_mtime_ns)}</style>")
 
 # Theme: an explicit choice (URL parameter or the sidebar toggle) wins; on a
@@ -1542,6 +1547,8 @@ def _remember_chart_option(key: str) -> None:
 
 @st.fragment
 def _render_analysis() -> None:
+    render_id = st.session_state.get("analysis_render_id", 0) + 1
+    st.session_state["analysis_render_id"] = render_id
     overview_tab, outlook_tab, dna_cost_tab, sensitivity_tab, assumptions_tab, about_tab = st.tabs(
         ["Lifecycle", "Start-year outlook", "DNA unit costs", "Sensitivity", "Assumptions", "About"],
         key="analysis_tabs", on_change="rerun",
@@ -1990,4 +1997,15 @@ def _render_analysis() -> None:
                 st.markdown("[alex@el-shaikh.com](mailto:alex@el-shaikh.com)")
 
 
+    active_tab = next(tab for tab in (overview_tab, outlook_tab, dna_cost_tab, sensitivity_tab, assumptions_tab, about_tab) if tab.open)
+    with active_tab:
+        st.html(f'<span class="analysis-ready" data-render-id="{render_id}"></span>')
+
+
+st.html(
+    '<span class="analysis-navigation-marker"></span><script>'
+    + _analysis_script((Path(__file__).parent / "economic_dna" / "analysis_navigation.js").stat().st_mtime_ns)
+    + '</script>',
+    unsafe_allow_javascript=True,
+)
 _render_analysis()

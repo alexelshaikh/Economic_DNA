@@ -45,6 +45,8 @@ DNA prices remain separate assumptions; a workload preset does not change those 
 The app renders only the active analysis tab. Tab changes and chart options run within a
 Streamlit fragment. Presets, resets, price multipliers, and manual input edits update the
 pending form locally without a server request. Calculate validates and commits the inputs.
+Tab switches retain one inert browser snapshot until the selected view and its Plotly charts
+are ready. The tab bar stays solid, without loading hidden views or adding server requests.
 The browser form helpers target the pinned Streamlit 1.63 widget markup and are covered by
 the browser checks below; Python action callbacks remain available as a fallback.
 CSV files are generated
@@ -107,6 +109,8 @@ python scripts/browser_check.py
 
 An installed Edge browser can be used with `python scripts/browser_check.py --channel msedge`
 without downloading Chromium. Screenshots and downloaded charts are written to `.tmp/browser-check`.
+`python scripts/browser_navigation_check.py --channel msedge` checks tab transitions frame by
+frame under delayed responses, rapid clicks, and keyboard navigation on desktop and mobile.
 
 This repository contains the code and data accompanying the paper **“An Economic Analysis of DNA-based Data Storage Systems.”** It provides fully reproducible notebooks for all main-text and supplementary figures, along with scripts and utilities to fetch and cache datasets.
 

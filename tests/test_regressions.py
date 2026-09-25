@@ -164,11 +164,15 @@ class AppRegressions(unittest.TestCase):
 
     def test_all_analysis_views_render_on_demand(self):
         app = self.app().run()
+        render_id = app.session_state["analysis_render_id"]
         for label, count in (("Start-year outlook", 1), ("DNA unit costs", 2), ("Sensitivity", 3), ("Assumptions", 0), ("About", 0), ("Lifecycle", 2)):
             test_app.StreamlitAppTests._open_tab(app, label)
             self.assertFalse(app.exception, label)
             self.assertEqual(len(app.get("plotly_chart")), count, label)
             self.assertEqual(len(app.get("download_button")), count, label)
+            ready = [element.proto.body for element in app.get("html") if 'class="analysis-ready"' in element.proto.body]
+            self.assertEqual(ready, [f'<span class="analysis-ready" data-render-id="{render_id + 1}"></span>'])
+            render_id += 1
 
     def test_preservation_scenario_with_free_synthesis_renders(self):
         app = self.app().run()
