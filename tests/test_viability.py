@@ -20,6 +20,8 @@ class ViabilityTests(unittest.TestCase):
                     self.assertLess(len(result.curve), 160)
                     self.assertTrue(np.isfinite(result.curve["gain_usd"]).all())
                     for row in result.curve.iloc[[0, len(result.curve) // 2, -1]].itertuples():
+                        if spec.unit == "$/MB" and row.parameter_value < 0:
+                            continue  # Negative prices are tested as a mathematical extension below.
                         value = int(row.parameter_value) if spec.field == "dna_durability_years" else row.parameter_value
                         totals = simulate_scenario(replace(scenario, **{spec.field: value})).totals.set_index("technology_key")
                         column = "present_value_usd" if result.use_present_value else "total_cost_usd"
@@ -40,10 +42,48 @@ class ViabilityTests(unittest.TestCase):
                 self.assertGreater(result.curve.gain_usd.max(), 0)
                 self.assertLess(result.curve.gain_usd.min(), 0)
 
-    def test_baseline_has_no_spurious_price_crossing(self):
+    def test_baseline_exposes_theoretical_negative_price_crossing(self):
         result = dna_cost_advantage(Scenario(), "dna_synthesis_cost_per_mb", "Tape On-premise", False)
+        self.assertEqual(len(result.crossings), 1)
+        self.assertLess(result.crossings[0].value, 0)
+        self.assertIn(0, result.curve.parameter_value.tolist())
+        self.assertAlmostEqual(result.curve.loc[result.curve.parameter_value == result.crossings[0].value, "gain_usd"].iloc[0], 0, places=7)
+        self.assertGreater(result.curve.gain_usd.max(), 0)
+        self.assertLess(result.curve.gain_usd.min(), 0)
+        with self.assertRaises(ValueError):
+            replace(Scenario(), dna_synthesis_cost_per_mb=result.crossings[0].value)
+
+    def test_signed_price_extension_matches_affine_costs(self):
+        scenario = Scenario(discount_rate_percent=3)
+        for field in ("dna_synthesis_cost_per_mb", "dna_sequencing_cost_per_mb"):
+            for discounted in (False, True):
+                column = "present_value_usd" if discounted else "total_cost_usd"
+                zero = simulate_scenario(replace(scenario, **{field: 0})).totals.set_index("technology_key")
+                one = simulate_scenario(replace(scenario, **{field: 1})).totals.set_index("technology_key")
+                slope = one.loc["DNA", column] - zero.loc["DNA", column]
+                result = dna_cost_advantage(scenario, field, "Tape On-premise", discounted, x_range=(-2, -1))
+                np.testing.assert_allclose(result.curve.dna_cost_usd, zero.loc["DNA", column] + slope * result.curve.parameter_value, rtol=1e-9)
+                self.assertEqual(result.curve.parameter_value.min(), -2)
+                self.assertEqual(result.curve.parameter_value.max(), -1)
+                figure = viability_chart(result)
+                self.assertEqual(tuple(figure.layout.xaxis.range), (-2, -1))
+                self.assertTrue(all(str(label).startswith("-") for label in figure.layout.xaxis.ticktext))
+
+    def test_custom_range_does_not_expand_to_include_root_or_current(self):
+        result = dna_cost_advantage(Scenario(), "dna_synthesis_cost_per_mb", "Tape On-premise", False, x_range=(0, 1))
         self.assertEqual(result.crossings, ())
-        self.assertTrue((result.curve.gain_usd < 0).all())
+        self.assertEqual((result.curve.parameter_value.min(), result.curve.parameter_value.max()), (0, 1))
+
+    def test_invalid_ranges_are_rejected(self):
+        for field, limits in (
+            ("dna_synthesis_cost_per_mb", (1, 1)), ("dna_synthesis_cost_per_mb", (2, 1)),
+            ("dna_synthesis_cost_per_mb", (float("nan"), 1)), ("dna_synthesis_cost_per_mb", (0, float("inf"))),
+            ("archive_size_tb", (-1, 2)), ("average_asset_size_mb", (0, 1)),
+            ("discount_rate_percent", (0, 100)), ("dna_durability_years", (1.5, 3)),
+            ("dna_durability_years", (1, 10001)),
+        ):
+            with self.subTest(field=field, limits=limits), self.assertRaises(ValueError):
+                dna_cost_advantage(Scenario(), field, "Tape On-premise", False, x_range=limits)
 
     def test_sequencing_price_crossing_and_free_price_endpoint(self):
         scenario = Scenario(dna_synthesis_cost_per_mb=0)
@@ -140,7 +180,7 @@ class ViabilityChartTests(unittest.TestCase):
             self.assertTrue(any(v and v < 0 for v in figure.data[1].y))
 
     def test_no_crossing_and_current_input_marker(self):
-        result = dna_cost_advantage(Scenario(), "dna_synthesis_cost_per_mb", "Tape On-premise", False)
+        result = dna_cost_advantage(Scenario(annual_retrieval_percent=0), "dna_sequencing_cost_per_mb", "Tape On-premise", False)
         figure = viability_chart(result)
         self.assertFalse(figure.layout.annotations)
         marker = next(trace for trace in figure.data if trace.name == "Current inputs")

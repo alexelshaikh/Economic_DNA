@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 
 from streamlit.delta_generator_singletons import get_dg_singleton_instance
-from streamlit.elements.lib.form_utils import FormData
 from streamlit.testing.v1 import AppTest
 
 from economic_dna import PRESET_SCENARIOS, Scenario
@@ -22,7 +21,8 @@ class StreamlitAppTests(unittest.TestCase):
 
     @staticmethod
     def _open_tab(app: AppTest, label: str) -> None:
-        app.session_state["analysis_tabs"] = label
+        # All panels now exist up front; actual navigation is browser-only.
+        assert label in [tab.label for tab in app.tabs]
         app.run()
 
     @staticmethod
@@ -197,9 +197,9 @@ class StreamlitAppTests(unittest.TestCase):
             any("Paper / About" in (markdown.value or "") for markdown in app.markdown)
         )
         self.assertEqual(len(app.metric), 4)
-        self.assertEqual(len(app.get("plotly_chart")), 2)
+        self.assertEqual(len(app.get("plotly_chart")), 8)
         download_buttons = app.get("download_button")
-        self.assertEqual(len(download_buttons), 2)
+        self.assertEqual(len(download_buttons), 8)
         self.assertEqual(
             {button.key for button in download_buttons},
             {
@@ -207,6 +207,7 @@ class StreamlitAppTests(unittest.TestCase):
                 for graph in (
                     "lifecycle",
                     "breakdown",
+                    "projection", "dna_synthesis", "dna_sequencing", "viability", "breakeven", "sensitivity",
                 )
             },
         )
@@ -222,15 +223,20 @@ class StreamlitAppTests(unittest.TestCase):
                 for graph in (
                     "lifecycle",
                     "breakdown",
+                    "projection", "dna_synthesis", "dna_sequencing", "viability", "breakeven", "sensitivity",
                 )
                 for file_format in ("png", "svg")
             },
         )
 
-    def test_rerun_starts_outside_synthetic_main_form(self):
-        get_dg_singleton_instance().main_dg._form_data = FormData("scenario_form")
+    def test_shared_main_generator_never_enters_the_scenario_form(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
         self.assertFalse(app.exception)
+        self.assertIsNone(get_dg_singleton_instance().main_dg._form_data)
+        for widget in app.number_input:
+            self.assertEqual(widget.proto.form_id, "scenario_form")
+        self.assertEqual(app.selectbox(key="viability_driver").proto.form_id, "")
+        self.assertEqual(app.text_input(key="viability_min").proto.form_id, "viability_range_form")
 
     def test_form_submission_recalculates_archive(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
@@ -403,6 +409,34 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertEqual(app.selectbox(key="viability_driver").value, "discount_rate_percent")
         self.assertEqual(app.selectbox(key="viability_comparison").value, "Tape On-premise")
         self.assertFalse(app.toggle(key="viability_focus").value)
+
+    def test_viability_range_apply_validation_reset_and_driver_change(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        committed = dict(app.session_state["committed_widgets"])
+        defaults = (app.text_input(key="viability_min").value, app.text_input(key="viability_max").value)
+
+        def axis_range():
+            chart = next(c for c in app.get("plotly_chart") if c.key == "chart_viability")
+            return json.loads(chart.proto.spec)["layout"]["xaxis"]["range"]
+
+        app.number_input(key="archive_value").set_value(2)
+        app.text_input(key="viability_min").set_value("-2")
+        app.text_input(key="viability_max").set_value("-1")
+        app.button(key="viability_apply").click().run()
+        self.assertFalse(app.exception)
+        self.assertEqual(axis_range(), [-2, -1])
+        self.assertEqual(app.session_state["committed_widgets"], committed)
+        app.text_input(key="viability_min").set_value("nan")
+        app.button(key="viability_apply").click().run()
+        self.assertTrue(app.error)
+        self.assertEqual(axis_range(), [-2, -1])
+        app.button(key="viability_reset").click().run()
+        self.assertFalse(app.exception)
+        self.assertFalse(app.error)
+        self.assertEqual((app.text_input(key="viability_min").value, app.text_input(key="viability_max").value), defaults)
+        app.selectbox(key="viability_driver").select("discount_rate_percent").run()
+        self.assertIsNone(app.session_state["viability_applied_range"])
+        self.assertGreaterEqual(float(app.text_input(key="viability_min").value), 0)
 
     def test_viability_comparison_falls_back_when_model_is_removed(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()

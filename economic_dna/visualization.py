@@ -702,13 +702,18 @@ def viability_chart(result: ViabilityResult, theme: str = DEFAULT_THEME) -> go.F
         ))
     figure.add_hline(y=0, line={"color": palette["axis_title_color"], "width": 1.5})
     low, high = float(xs.min()), float(xs.max())
+    theoretical = result.parameter.unit == "$/MB" and low < 0
+    if theoretical:
+        figure.add_vrect(x0=low, x1=min(0, high), fillcolor=palette["axis_title_color"], opacity=0.06, line_width=0, layer="below")
+        if low < 0 < high:
+            figure.add_vline(x=0, line={"color": palette["axis_title_color"], "width": 1, "dash": "dot"})
     for index, crossing in enumerate(result.crossings):
         position = (crossing.value - low) / (high - low) if high > low else 0.5
         anchor = "left" if position < 0.3 else "right" if position > 0.7 else "center"
         figure.add_vline(x=crossing.value, line={"color": palette["axis_title_color"], "width": 1.5, "dash": "dash"})
         figure.add_annotation(
             x=crossing.value, y=1.0 - index * 0.1, yref="paper", showarrow=False,
-            text=f"{'Cost flips' if crossing.discrete else 'Break-even'}: {format_display_number(float(f'{crossing.value:.3g}'))}",
+            text=f"{'Theoretical parity' if theoretical and crossing.value < 0 else 'Cost flips' if crossing.discrete else 'Break-even'}: {format_display_number(float(f'{crossing.value:.3g}'))}",
             hovertext=f"{format_display_number(crossing.value)} {escape(unit)}" + ("<br>Discrete durability step, not exact cost equality" if crossing.discrete else "<br>Equal lifecycle costs"),
             xanchor=anchor, xshift=6 if anchor == "left" else -6 if anchor == "right" else 0,
             bgcolor=palette["plot_bgcolor"], font={"size": 11, "color": palette["font_color"]},
@@ -737,9 +742,18 @@ def viability_chart(result: ViabilityResult, theme: str = DEFAULT_THEME) -> go.F
         tickvals=ticks, ticktext=[("-" if tick < 0 else "") + label for tick, label in zip(ticks, labels)],
         range=[minimum - span * 0.05, maximum + span * 0.1],
     )
-    x_ticks, _ = _linear_ticks(low, high, low == 0)
+    # This axis may straddle zero or be entirely negative, unlike cost axes.
+    x_ticks = []
+    if high > low:
+        raw_step = (high - low) / 5
+        magnitude = 10.0 ** math.floor(math.log10(raw_step))
+        step = next((m * magnitude for m in _LINEAR_STEP_MULTIPLIERS if raw_step <= m * magnitude), 10 * magnitude)
+        x_ticks = [i * step for i in range(math.ceil(low / step), math.floor(high / step) + 1)]
     if x_ticks:
-        figure.update_xaxes(tickvals=x_ticks, ticktext=_tick_labels(x_ticks))
+        labels = _tick_labels([abs(tick) for tick in x_ticks])
+        figure.update_xaxes(tickvals=x_ticks, ticktext=[("-" if tick < 0 else "") + label for tick, label in zip(x_ticks, labels)])
+    if high > low:
+        figure.update_xaxes(range=[low, high])
     figure.update_layout(
         title="DNA cost advantage",
         xaxis_title=f"{result.parameter.label} ({unit})",

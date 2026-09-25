@@ -152,27 +152,28 @@ class AppRegressions(unittest.TestCase):
         self.assertEqual(app.session_state["committed_widgets"]["projection_end"], 2400)
         test_app.StreamlitAppTests._open_tab(app, "Start-year outlook")
         self.assertFalse(app.exception)
-        self.assertEqual(len(app.get("plotly_chart")), 1)
+        self.assertEqual(len(app.tabs[1].get("plotly_chart")), 1)
 
-    def test_inactive_views_do_not_compute_and_csv_is_deferred(self):
+    def test_views_are_prepared_once_and_csv_is_deferred(self):
         import streamlit as st
         st.cache_data.clear()
-        with patch("economic_dna.simulate_start_years", side_effect=AssertionError("Hidden outlook ran")), patch("economic_dna.dna_cost_sensitivity", side_effect=AssertionError("Hidden sensitivity ran")), patch("economic_dna.dna_cost_advantage", side_effect=AssertionError("Hidden viability ran")), patch("pandas.DataFrame.to_csv", side_effect=AssertionError("CSV was generated before download")):
+        with patch("pandas.DataFrame.to_csv", side_effect=AssertionError("CSV was generated before download")):
             app = self.app().run()
         self.assertFalse(app.exception)
-        self.assertEqual(len(app.get("plotly_chart")), 2)
+        self.assertEqual(len(app.get("plotly_chart")), 8)
 
-    def test_all_analysis_views_render_on_demand(self):
+        with patch("economic_dna.simulate_start_years", side_effect=AssertionError("Projection cache missed")), patch("economic_dna.dna_cost_sensitivity", side_effect=AssertionError("Sensitivity cache missed")), patch("economic_dna.dna_cost_advantage", side_effect=AssertionError("Viability cache missed")):
+            app.run()
+        self.assertFalse(app.exception)
+
+    def test_all_analysis_views_are_ready_for_client_navigation(self):
         app = self.app().run()
-        render_id = app.session_state["analysis_render_id"]
         for label, count in (("Start-year outlook", 1), ("DNA unit costs", 2), ("Sensitivity", 3), ("Assumptions", 0), ("About", 0), ("Lifecycle", 2)):
             test_app.StreamlitAppTests._open_tab(app, label)
             self.assertFalse(app.exception, label)
-            self.assertEqual(len(app.get("plotly_chart")), count, label)
-            self.assertEqual(len(app.get("download_button")), count, label)
-            ready = [element.proto.body for element in app.get("html") if 'class="analysis-ready"' in element.proto.body]
-            self.assertEqual(ready, [f'<span class="analysis-ready" data-render-id="{render_id + 1}"></span>'])
-            render_id += 1
+            panel = next(tab for tab in app.tabs if tab.label == label)
+            self.assertEqual(len(panel.get("plotly_chart")), count, label)
+            self.assertEqual(len(panel.get("download_button")), count, label)
 
     def test_preservation_scenario_with_free_synthesis_renders(self):
         app = self.app().run()
@@ -191,4 +192,4 @@ class AppRegressions(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertTrue(app.error)
         self.assertEqual(app.metric[0].value, "1 TB")
-        self.assertEqual(len(app.get("plotly_chart")), 2)
+        self.assertEqual(len(app.get("plotly_chart")), 8)

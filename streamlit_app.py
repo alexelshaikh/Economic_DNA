@@ -8,7 +8,6 @@ import streamlit as st
 
 # Form context for the main-area widgets (see the comment before the cost
 # rail): pinned to streamlit==1.63.0, whose form internals these touch.
-from streamlit.delta_generator_singletons import get_dg_singleton_instance
 from streamlit.elements.lib.form_utils import FormData as _FormData
 
 from economic_dna import (
@@ -49,11 +48,12 @@ st.set_page_config(
     initial_sidebar_state="auto",
 )
 
-_main_dg = get_dg_singleton_instance().main_dg
-# The app temporarily attaches form data to the main dg so header/panel
-# controls can join the sidebar form. A callback-triggered rerun can interrupt
-# before the normal cleanup point, so each run must begin outside that form.
-_main_dg._form_data = None
+def _scenario_container(key: str):
+    # Only this session's container joins the sidebar form. Never mutate the
+    # process-wide main DeltaGenerator: concurrent visitors share that object.
+    container = st.container(key=key)
+    container._form_data = _FormData("scenario_form")
+    return container
 
 @st.cache_data(show_spinner=False, max_entries=1)
 def _stylesheet(modified_ns: int) -> str:
@@ -63,11 +63,6 @@ def _stylesheet(modified_ns: int) -> str:
 @st.cache_data(show_spinner=False, max_entries=1)
 def _form_script(modified_ns: int) -> str:
     return (Path(__file__).parent / "economic_dna" / "form_controls.js").read_text(encoding="utf-8")
-
-
-@st.cache_data(show_spinner=False, max_entries=1)
-def _analysis_script(modified_ns: int) -> str:
-    return (Path(__file__).parent / "economic_dna" / "analysis_navigation.js").read_text(encoding="utf-8")
 
 
 st.html(f"<style>{_stylesheet((Path(__file__).parent / 'economic_dna' / 'ui.css').stat().st_mtime_ns)}</style>")
@@ -200,8 +195,7 @@ def _toggle_theme() -> None:
     st.query_params["theme"] = new_theme
 
 
-_main_dg._form_data = _FormData("scenario_form")
-with st.container(key="theme-toggle-anchor"):
+with _scenario_container("theme-toggle-anchor"):
     st.form_submit_button(
         label=None,
         icon=":material/dark_mode:" if theme == "light" else ":material/light_mode:",
@@ -209,8 +203,6 @@ with st.container(key="theme-toggle-anchor"):
         help="Switch to dark mode" if theme == "light" else "Switch to light mode",
         on_click=_toggle_theme,
     )
-_main_dg._form_data = None
-
 # Cost-assumption models for the right-edge rail. Each key is a widget prefix
 # (matching the scenario parameter names), and the label is the tab handle.
 COST_MODELS = [
@@ -789,8 +781,8 @@ def _cached_sensitivity(scenario: Scenario, use_present_value: bool) -> pd.DataF
 
 
 @st.cache_data(show_spinner=False, max_entries=16, ttl=600)
-def _cached_viability(scenario: Scenario, field: str, comparison: str, use_present_value: bool, focus: bool):
-    return dna_cost_advantage(scenario, field, comparison, use_present_value, focus=focus)
+def _cached_viability(scenario: Scenario, field: str, comparison: str, use_present_value: bool, focus: bool, x_range=None):
+    return dna_cost_advantage(scenario, field, comparison, use_present_value, focus=focus, x_range=x_range)
 
 
 @st.cache_data(show_spinner=False, max_entries=32)
@@ -893,7 +885,7 @@ st.session_state.setdefault("committed_widgets", dict(initial_widgets))
 # All inputs live in one form: Streamlit batches form widgets client-side and
 # reruns the script only on a submit, so editing parameters never re-renders
 # the buttons or the charts. The form block lives in the sidebar; the panel
-# and header Calculate join it via the main dg's form data below.
+# and header Calculate join it through session-local containers.
 with st.sidebar:
     with st.form("scenario_form", border=False, enter_to_submit=False):
         with st.expander("Example scenarios", expanded=False):
@@ -1055,10 +1047,8 @@ with st.sidebar:
                 )
     
 # The panel and header Calculate join the sidebar's form. st.form cannot
-# wrap both containers (a form is a single block), so the form id is attached
-# to the main dg directly — the same mechanism the form block uses on itself.
-# Widgets added through `st.foo` calls read this dg's form data, so the panel
-# inputs batch with the sidebar's and only a Calculate submit reruns anything.
+# wrap both containers (a form is a single block), so each local container
+# carries the same form id. This batches inputs without shared global state.
 # Cost-assumption rail and panel: slim vertical model tabs on the right
 # edge of the page (a bottom strip on phones). The tabs are pure-HTML radio
 # labels — opening, closing, and switching never trigger a script rerun, so
@@ -1067,8 +1057,7 @@ with st.sidebar:
 # Wide centered Calculate button in the top header: it stays visible while
 # the sidebar or a cost panel is open, so it works after either kind of edit.
 # (Hidden on phones, where the sheet bar and the panel bar cover the flows.)
-_main_dg._form_data = _FormData("scenario_form")
-with st.container(key="global-reset-btn"):
+with _scenario_container("global-reset-btn"):
     st.form_submit_button(
         label=None,
         key="global_reset",
@@ -1077,9 +1066,6 @@ with st.container(key="global-reset-btn"):
         on_click=_reset_widget_keys,
         args=(WIDGET_KEYS,),
     )
-
-_main_dg._form_data = _FormData("scenario_form")
-
 
 def _render_model_reset(model_key: str) -> None:
     with st.container(key=f"model-reset-{model_key}"):
@@ -1121,7 +1107,7 @@ def _render_order_of_magnitude_steppers(widget_key: str) -> None:
         )
 
 
-with st.container(key="calculate-anchor"):
+with _scenario_container("calculate-anchor"):
     calculate_header = st.form_submit_button(
         "Calculate",
         icon=":material/calculate:",
@@ -1130,7 +1116,6 @@ with st.container(key="calculate-anchor"):
         width="stretch",
     )
 
-_main_dg._form_data = None
 with st.container(key="copy-link-anchor"):
     st.button(
         label=None,
@@ -1139,14 +1124,12 @@ with st.container(key="copy-link-anchor"):
         help="Copy a link to the calculated scenario",
     )
 _bind_copy_link_button("copy_scenario_link")
-_main_dg._form_data = _FormData("scenario_form")
-
 # The tabs are a Streamlit radio: the frontend manages its checked state
 # instantly (no rerun \u2014 it is a form widget), the radio group enforces
 # exclusivity natively, and the CSS reads the checked input's value to open
 # the matching panel. "\u2715" is the closed state. (Raw HTML radios/details do
 # not work: Streamlit's page scripts suppress native form-control activation.)
-with st.container(key="cost-rail"):
+with _scenario_container("cost-rail"):
     st.radio(
         "Cost model",
         options=["\u2715", "DNA", "Amazon", "Azure", "Tape", "Custom"],
@@ -1155,7 +1138,7 @@ with st.container(key="cost-rail"):
         label_visibility="collapsed",
     )
 
-with st.container(key="cost-panel"):
+with _scenario_container("cost-panel"):
     st.markdown(
         '<div class="cost-panel-header">'
         '<div class="sidebar-kicker">Cost assumptions</div>'
@@ -1414,13 +1397,13 @@ with st.container(key="cost-panel"):
 
 # Theme detection must wait until all form widgets exist. Submitting the form
 # also preserves edits made while a slow first page load is still finishing.
-st.form_submit_button(
-    label=None,
-    key="theme_auto_dark",
-    on_click=_apply_system_dark,
-    icon=":material/dark_mode:",
-)
-_main_dg._form_data = None
+with _scenario_container("theme-auto-anchor"):
+    st.form_submit_button(
+        label=None,
+        key="theme_auto_dark",
+        on_click=_apply_system_dark,
+        icon=":material/dark_mode:",
+    )
 
 submitted = calculate_header or calculate_scenario or calculate_panel
 
@@ -1545,17 +1528,15 @@ def _remember_chart_option(key: str) -> None:
     st.session_state[f"saved_{key}"] = st.session_state[key]
 
 
-@st.fragment
 def _render_analysis() -> None:
-    render_id = st.session_state.get("analysis_render_id", 0) + 1
-    st.session_state["analysis_render_id"] = render_id
     overview_tab, outlook_tab, dna_cost_tab, sensitivity_tab, assumptions_tab, about_tab = st.tabs(
         ["Lifecycle", "Start-year outlook", "DNA unit costs", "Sensitivity", "Assumptions", "About"],
-        key="analysis_tabs", on_change="rerun",
+        key="analysis_tabs", on_change="ignore",
     )
 
-    if overview_tab.open:
-        with overview_tab:
+    @st.fragment
+    def render_lifecycle():
+        with st.container():
             _section_intro(
                 "Lifecycle comparison",
                 "Cumulative lifecycle cost for one archive opened in the selected start year. "
@@ -1621,8 +1602,9 @@ def _render_analysis() -> None:
                 "chart_breakdown",
             )
 
-    if outlook_tab.open:
-        with outlook_tab:
+    @st.fragment
+    def render_outlook():
+        with st.container():
             projection = _cached_projection(scenario, projection_end)
             _section_intro(
                 "Start-year sensitivity",
@@ -1669,8 +1651,9 @@ def _render_analysis() -> None:
             else:
                 st.info("Include DNA and at least one comparison technology to calculate crossover years.")
 
-    if dna_cost_tab.open:
-        with dna_cost_tab:
+    @st.fragment
+    def render_unit_costs():
+        with st.container():
             dna_costs = _cached_dna_costs(scenario, dna_curve_end)
             _section_intro(
                 "DNA unit economics",
@@ -1752,8 +1735,9 @@ def _render_analysis() -> None:
                     "chart_dna_sequencing",
                 )
 
-    if sensitivity_tab.open:
-        with sensitivity_tab:
+    @st.fragment
+    def render_sensitivity():
+        with st.container():
             comparisons = [technology for technology in scenario.technologies if technology != "DNA"]
             if "DNA" in scenario.technologies and comparisons:
                 _section_intro(
@@ -1787,6 +1771,41 @@ def _render_analysis() -> None:
                 )
                 try:
                     viability = _cached_viability(scenario, driver, comparison, use_present_value, focus)
+                    default_range = (float(viability.curve.parameter_value.min()), float(viability.curve.parameter_value.max()))
+                    range_context = (scenario, driver, comparison, use_present_value, focus)
+                    if st.session_state.get("viability_range_context") != range_context:
+                        st.session_state["viability_range_context"] = range_context
+                        st.session_state["viability_applied_range"] = None
+                        st.session_state["viability_min"] = str(default_range[0])
+                        st.session_state["viability_max"] = str(default_range[1])
+
+                    def reset_range():
+                        st.session_state["viability_applied_range"] = None
+                        st.session_state["viability_min"] = str(default_range[0])
+                        st.session_state["viability_max"] = str(default_range[1])
+
+                    with st.form("viability_range_form", border=False):
+                        minimum_column, maximum_column = st.columns(2)
+                        with minimum_column:
+                            minimum = st.text_input(f"X-axis minimum ({driver_specs[driver].unit})", key="viability_min")
+                        with maximum_column:
+                            maximum = st.text_input(f"X-axis maximum ({driver_specs[driver].unit})", key="viability_max")
+                        apply_column, reset_column = st.columns(2)
+                        with apply_column:
+                            apply_range = st.form_submit_button("Apply range", icon=":material/check:", key="viability_apply")
+                        with reset_column:
+                            st.form_submit_button("Reset range", icon=":material/restart_alt:", key="viability_reset", on_click=reset_range)
+                    if apply_range:
+                        try:
+                            requested_range = (float(minimum), float(maximum))
+                            _cached_viability(scenario, driver, comparison, use_present_value, focus, requested_range)
+                        except ValueError as error:
+                            st.error(f"Range not applied: {error}")
+                        else:
+                            st.session_state["viability_applied_range"] = requested_range
+                    applied_range = st.session_state.get("viability_applied_range")
+                    if applied_range is not None:
+                        viability = _cached_viability(scenario, driver, comparison, use_present_value, focus, applied_range)
                 except ValueError as error:
                     st.warning(str(error))
                 else:
@@ -1799,10 +1818,15 @@ def _render_analysis() -> None:
                         f"{gain_label} vs. {viability.comparison}: {sign}${format_display_number(abs(viability.current_gain))}."
                     )
                     st.html(f'<p class="viability-summary">{html.escape(summary)}</p>')
+                    if spec.unit == "$/MB" and viability.curve.parameter_value.min() < 0:
+                        st.caption("Negative prices are theoretical subsidies, not attainable purchase prices. "
+                                   "The shaded region extends the cost model below zero; main model inputs are unchanged.")
                     _render_chart(viability_chart(viability, theme), key="chart_viability", filename="dna-cost-advantage")
                     if not viability.crossings:
                         if (viability.curve["gain_usd"] == 0).all():
                             st.caption("Equal cost throughout the sampled range.")
+                        elif viability.curve["gain_usd"].nunique() == 1:
+                            st.caption("This driver does not change the cost advantage in this scenario.")
                         else:
                             st.caption("No break-even crossing in the sampled range.")
                     if viability.curve["gain_usd"].isna().any():
@@ -1901,8 +1925,9 @@ def _render_analysis() -> None:
                     "chart_sensitivity",
                 )
 
-    if assumptions_tab.open:
-        with assumptions_tab:
+    @st.fragment
+    def render_assumptions():
+        with st.container():
             assumptions = load_assumptions()
             _section_intro(
                 "Assumptions and scope",
@@ -1964,8 +1989,9 @@ def _render_analysis() -> None:
                 for source in assumptions["sources"].values():
                     st.markdown(f"- [{source['label']}]({source['url']})")
 
-    if about_tab.open:
-        with about_tab:
+    @st.fragment
+    def render_about():
+        with st.container():
             _section_intro(
                 "About this explorer",
                 "An interactive implementation of a DNA storage cost model for comparing long-run archival "
@@ -1997,15 +2023,19 @@ def _render_analysis() -> None:
                 st.markdown("[alex@el-shaikh.com](mailto:alex@el-shaikh.com)")
 
 
-    active_tab = next(tab for tab in (overview_tab, outlook_tab, dna_cost_tab, sensitivity_tab, assumptions_tab, about_tab) if tab.open)
-    with active_tab:
-        st.html(f'<span class="analysis-ready" data-render-id="{render_id}"></span>')
+    # Native client-side tabs retain their graphs. Controls rerun only their view.
+    with overview_tab:
+        render_lifecycle()
+    with outlook_tab:
+        render_outlook()
+    with dna_cost_tab:
+        render_unit_costs()
+    with sensitivity_tab:
+        render_sensitivity()
+    with assumptions_tab:
+        render_assumptions()
+    with about_tab:
+        render_about()
 
 
-st.html(
-    '<span class="analysis-navigation-marker"></span><script>'
-    + _analysis_script((Path(__file__).parent / "economic_dna" / "analysis_navigation.js").stat().st_mtime_ns)
-    + '</script>',
-    unsafe_allow_javascript=True,
-)
 _render_analysis()

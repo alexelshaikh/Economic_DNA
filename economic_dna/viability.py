@@ -52,7 +52,7 @@ def _samples(low: float, high: float, integer: bool) -> np.ndarray:
         return np.array([low])
     values = np.linspace(low, high, 65)
     positive_low = max(low, high * 1e-9)
-    if positive_low > 0:
+    if high > 0 and positive_low > 0:
         values = np.concatenate((values, np.geomspace(positive_low, high, 65)))
     if integer:
         values = np.round(values)
@@ -66,12 +66,15 @@ def dna_cost_advantage(
     use_present_value: bool,
     *,
     focus: bool = True,
+    x_range: tuple[float, float] | None = None,
 ) -> ViabilityResult:
     """Gain is comparison cost minus DNA cost, using the same workload for both.
 
     Price crossings are solved analytically. Other continuous crossings are
     bracketed by a bounded sample and refined; integer durability transitions
     are marked as steps, not invented points of exact cost equality.
+    Negative unit prices extrapolate a theoretical subsidy without weakening
+    Scenario validation. Explicit axis limits override automatic focusing.
     """
     parameter = next((p for p in DNA_SENSITIVITY_PARAMETERS if p.field == field), None)
     if parameter is None:
@@ -81,13 +84,39 @@ def dna_cost_advantage(
     use_present_value = use_present_value or field == "discount_rate_percent"
     current = float(getattr(scenario, field))
     integer = field == "dna_durability_years"
+    price_field = field in ("dna_synthesis_cost_per_mb", "dna_sequencing_cost_per_mb")
+    if x_range is not None:
+        low, high = x_range
+        if not all(math.isfinite(v) for v in (low, high, high - low)) or low >= high:
+            raise ValueError("Enter finite axis limits with minimum less than maximum.")
+        if not price_field:
+            for value in x_range:
+                if integer and (not float(value).is_integer() or value > 10_000):
+                    raise ValueError("Durability limits must be whole years from 1 to 10,000.")
+                replace(scenario, **{field: int(value) if integer else value})
     years = np.arange(scenario.start_year, scenario.start_year + scenario.horizon_years)
     elapsed = years - scenario.start_year
     assumptions = load_assumptions()
+    price_terms = None
+    if price_field:
+        if field == "dna_synthesis_cost_per_mb":
+            price_terms = _dna_synthesis_linear_terms(scenario, use_present_value)
+        else:
+            write_coefficient, coefficient = _dna_synthesis_linear_terms(
+                replace(scenario, dna_sequencing_cost_per_mb=1.0), use_present_value
+            )
+            price_terms = coefficient, write_coefficient * scenario.dna_synthesis_cost_per_mb
+        weights = np.power(1 + scenario.discount_rate_percent / 100, -elapsed) if use_present_value else np.ones(len(years))
+        peer_cost = float(sum(np.dot(stream, weights) for stream in CALCULATORS[comparison](scenario, years, assumptions)))
 
     @lru_cache(maxsize=512)
     def costs(value: float) -> tuple[float, float, float]:
         try:
+            if price_terms is not None:
+                # Signed prices are an affine extrapolation, not a valid Scenario.
+                dna = price_terms[0] * value + price_terms[1]
+                gain = peer_cost - dna
+                return (dna, peer_cost, gain) if all(math.isfinite(v) for v in (dna, peer_cost, gain)) else (math.nan,) * 3
             candidate = replace(scenario, **{field: int(value) if integer else float(value)})
             with np.errstate(over="raise", invalid="raise", divide="raise"):
                 weights = np.power(1 + candidate.discount_rate_percent / 100, -elapsed) if use_present_value else np.ones(len(years))
@@ -106,24 +135,20 @@ def dna_cost_advantage(
     current_costs = costs(current)
     if not math.isfinite(current_costs[2]):
         raise ValueError("The current comparison exceeds the numeric range")
-    low, high = _bounds(scenario, field)
+    low, high = x_range if x_range is not None else _bounds(scenario, field)
     crossings: list[ViabilityCrossing] = []
-    price_field = field in ("dna_synthesis_cost_per_mb", "dna_sequencing_cost_per_mb")
     if price_field:
-        if field == "dna_synthesis_cost_per_mb":
-            coefficient, fixed = _dna_synthesis_linear_terms(scenario, use_present_value)
-        else:
-            write_coefficient, coefficient = _dna_synthesis_linear_terms(
-                replace(scenario, dna_sequencing_cost_per_mb=1.0), use_present_value
-            )
-            fixed = write_coefficient * scenario.dna_synthesis_cost_per_mb
+        coefficient, fixed = price_terms
         if coefficient > 0:
             root = (current_costs[1] - fixed) / coefficient
-            if math.isfinite(root) and root >= 0:
+            if math.isfinite(root):
                 crossings.append(ViabilityCrossing(root))
-                high = max(high, root * 2)
+                if x_range is None:
+                    low, high = min(low, root * 2), max(high, root * 2)
     else:
-        values = np.unique(np.append(_samples(low, high, integer), current))
+        values = _samples(low, high, integer)
+        if low <= current <= high:
+            values = np.unique(np.append(values, current))
         gains = [costs(float(x))[2] for x in values]
         all_equal = all(gain == 0 for gain in gains)
         if not all_equal:
@@ -169,14 +194,19 @@ def dna_cost_advantage(
         if not unique_crossings or not math.isclose(crossing.value, unique_crossings[-1].value, rel_tol=1e-8, abs_tol=0):
             unique_crossings.append(crossing)
     crossings = unique_crossings
-    if focus and crossings:
+    if focus and crossings and x_range is None:
         first, last = crossings[0].value, crossings[-1].value
-        padding = max((last - first) * 0.5, last * 0.6, 1.0 if integer else high * 1e-12)
+        padding = max((last - first) * 0.5, abs(last) * 0.6, 1.0 if integer else high * 1e-12)
         low, high = max(low, first - padding), min(high, last + padding)
+        if price_field and last < 0:
+            high = max(high, abs(last) * 0.2)
         if integer:
             low, high = math.floor(low), math.ceil(high)
 
+    crossings = [crossing for crossing in crossings if low <= crossing.value <= high]
     values = list(_samples(low, high, integer))
+    if low <= 0 <= high:
+        values.append(0.0)
     if low <= current <= high:
         values.append(current)
     for crossing in crossings:
@@ -190,6 +220,8 @@ def dna_cost_advantage(
         for value in sorted(set(values))
         for dna, other, gain in [costs(float(value))]
     ]
+    if not any(math.isfinite(row["gain_usd"]) for row in rows):
+        raise ValueError("No finite costs in this range. Choose less extreme axis limits.")
     return ViabilityResult(
         parameter, _technology_label(scenario, comparison), pd.DataFrame(rows), tuple(crossings),
         current, current_costs[2], use_present_value,

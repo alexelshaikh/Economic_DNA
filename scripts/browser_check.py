@@ -12,6 +12,7 @@ from playwright.sync_api import expect, sync_playwright
 
 def check(url: str, output: Path, channel: str | None) -> None:
     output.mkdir(parents=True, exist_ok=True)
+    expect.set_options(timeout=30000)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(channel=channel, headless=True)
         context = browser.new_context(viewport={"width": 1440, "height": 1000}, color_scheme="light")
@@ -21,7 +22,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
         page.on("pageerror", lambda error: errors.append(str(error)))
         page.on("websocket", lambda ws: ws.on("framesent", lambda payload: sent_frames.append(payload)))
         page.goto(url)
-        expect(page.locator(".js-plotly-plot")).to_have_count(2)
+        expect(page.locator(".js-plotly-plot")).to_have_count(8, timeout=30000)
 
         def button(key):
             return page.locator(f".st-key-{key} button:visible")
@@ -30,6 +31,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
             return page.locator(f'.st-key-cost-rail [data-testid="stRadioOption"]:has(input[value="{index}"])')
 
         def tab(label, chart):
+            expect(page.locator('.stApp')).to_have_attribute("data-test-script-state", "notRunning")
             if model(0).is_visible():
                 model(0).click()
             page.get_by_role("tab", name=label, exact=True).click()
@@ -85,6 +87,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
             expect(current.locator(".st-key-custom_name input")).to_have_value("Custom storage")
 
         def check_navigation(current):
+            expect(current.locator('.stApp')).to_have_attribute("data-test-script-state", "notRunning")
             tabs = current.get_by_role("tab")
             expect(tabs).to_have_count(6)
             expect(current.locator('[role="tab"][aria-selected="true"]')).to_have_css("background-color", "rgb(8, 127, 140)")
@@ -103,7 +106,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
         check_initial_model_costs(page)
         check_initial_workload(page)
         page.reload()
-        expect(page.locator(".js-plotly-plot")).to_have_count(2)
+        expect(page.locator(".js-plotly-plot")).to_have_count(8, timeout=30000)
         page.wait_for_function("window.__dnaFormControls !== undefined")
         check_initial_workload(page)
         pending(False)
@@ -120,6 +123,8 @@ def check(url: str, output: Path, channel: str | None) -> None:
         button("theme_toggle").click()
         expect(page.locator(".theme-light")).to_be_attached()
         tab("Lifecycle", "lifecycle")
+        page.wait_for_function("document.querySelector('.st-key-chart_lifecycle .js-plotly-plot')?.layout.plot_bgcolor === '#ffffff'")
+        expect(page.locator('[data-stale="true"]')).to_have_count(0)
         initial_frames = len(sent_frames)
         chart = page.locator(".st-key-chart_lifecycle .js-plotly-plot")
         chart.evaluate("e => e.dataset.inputActionCheck = 'original'")
@@ -254,6 +259,9 @@ def check(url: str, output: Path, channel: str | None) -> None:
         select_chart_option("Cost driver", "Synthesis cost")
         page.get_by_text("Focus on break-even", exact=True).click()
         expect(viability.locator(".annotation-text")).to_have_count(1)
+        expect(viability.locator(".xtitle")).to_contain_text("Synthesis cost")
+        page.wait_for_function("!document.querySelector('.st-key-chart_viability .js-plotly-plot')?.data.some(t => t.name === 'Current inputs')")
+        expect(page.locator('[data-stale="true"]')).to_have_count(0)
         for chart_name in ("viability", "breakeven"):
             for file_format in ("csv", "png", "svg"):
                 with page.expect_download(timeout=15000) as download:
@@ -304,7 +312,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
         dark.on("pageerror", lambda error: errors.append(str(error)))
         dark.goto(url)
         expect(dark.locator(".theme-dark")).to_be_attached(timeout=30000)
-        expect(dark.locator(".js-plotly-plot")).to_have_count(2, timeout=30000)
+        expect(dark.locator(".js-plotly-plot")).to_have_count(8, timeout=30000)
         dark.wait_for_function("window.__dnaFormControls !== undefined")
         expect(dark).to_have_url(re.compile(r"theme=dark"), timeout=30000)
         check_initial_model_costs(dark)
@@ -315,7 +323,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
         check_initial_model_costs(dark)
         check_initial_workload(dark)
         dark.reload()
-        expect(dark.locator(".js-plotly-plot")).to_have_count(2, timeout=30000)
+        expect(dark.locator(".js-plotly-plot")).to_have_count(8, timeout=30000)
         check_initial_workload(dark)
         shot("first-visit-dark", dark)
         dark.close()
@@ -326,7 +334,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
             mobile.on("websocket", lambda ws: ws.on("framesent", lambda payload: mobile_frames.append(payload)))
             mobile.on("pageerror", lambda error: errors.append(str(error)))
             mobile.goto(url)
-            expect(mobile.locator(".js-plotly-plot")).to_have_count(2)
+            expect(mobile.locator(".js-plotly-plot")).to_have_count(8, timeout=30000)
             check_initial_model_costs(mobile)
             check_initial_workload(mobile)
             mobile.wait_for_timeout(300)
@@ -398,7 +406,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
                 mobile.wait_for_timeout(300)
                 shot(f"mobile-dark-{width}", mobile)
             mobile.goto(preservation_url)
-            expect(mobile.locator(".js-plotly-plot")).to_have_count(2)
+            expect(mobile.locator(".js-plotly-plot")).to_have_count(8, timeout=30000)
             mobile.get_by_role("tab", name="Sensitivity", exact=True).click()
             mobile_viability = mobile.locator(".st-key-chart_viability .js-plotly-plot")
             expect(mobile_viability.locator(".annotation-text")).to_have_count(1)

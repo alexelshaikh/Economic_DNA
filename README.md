@@ -35,6 +35,11 @@ both models; all other assumptions stay fixed. Price drivers refer to the DNA co
 The default view focuses on break-even; switch off **Focus on break-even** to include the
 current input. Dashed markers identify equal-cost crossings, or discrete cost flips for
 whole-year durability. Some scenarios have no crossing within the sampled range.
+Synthesis and sequencing sweeps also show negative-price crossings as **theoretical parity**:
+these represent a subsidy, not a valid purchase price. Negative values never enter the main
+scenario. Set x-axis minimum and maximum, then **Apply range** to explore a specific interval;
+**Reset range** restores the automatic limits. Changing the driver, comparison, focus, or
+committed scenario restores its defaults. Invalid ranges leave the last valid graph intact.
 
 Default prices, price base years, and durability values are read from `assumptions.yaml` when
 the process starts. Restart the app after editing that file. The historical fits and editable
@@ -42,11 +47,11 @@ DNA prices remain separate assumptions; a workload preset does not change those 
 
 ### Small-server performance
 
-The app renders only the active analysis tab. Tab changes and chart options run within a
-Streamlit fragment. Presets, resets, price multipliers, and manual input edits update the
-pending form locally without a server request. Calculate validates and commits the inputs.
-Tab switches retain one inert browser snapshot until the selected view and its Plotly charts
-are ready. The tab bar stays solid, without loading hidden views or adding server requests.
+Analysis views are prepared up front using cached calculations. Tabs switch entirely in the
+browser, retaining their graphs and sending no server request. This trades a larger initial
+render for instant navigation and no per-click server work. Each view has its own Streamlit
+fragment, so chart controls only update that view. Presets, resets, price multipliers, and
+manual input edits update the pending form locally. Calculate validates and commits inputs.
 The browser form helpers target the pinned Streamlit 1.63 widget markup and are covered by
 the browser checks below; Python action callbacks remain available as a fallback.
 CSV files are generated
@@ -110,7 +115,8 @@ python scripts/browser_check.py
 An installed Edge browser can be used with `python scripts/browser_check.py --channel msedge`
 without downloading Chromium. Screenshots and downloaded charts are written to `.tmp/browser-check`.
 `python scripts/browser_navigation_check.py --channel msedge` checks tab transitions frame by
-frame under delayed responses, rapid clicks, and keyboard navigation on desktop and mobile.
+frame, verifies zero server requests and retained graphs, and tests signed range controls,
+keyboard navigation, and both themes on desktop and mobile.
 
 This repository contains the code and data accompanying the paper **“An Economic Analysis of DNA-based Data Storage Systems.”** It provides fully reproducible notebooks for all main-text and supplementary figures, along with scripts and utilities to fetch and cache datasets.
 
