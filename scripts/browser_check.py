@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import time
 from pathlib import Path
 
 from PIL import Image, ImageStat
@@ -54,6 +55,19 @@ def check(url: str, output: Path, channel: str | None) -> None:
             }.items():
                 expect(current.locator(f".st-key-{key} input")).to_have_value(re.compile(re.escape(value) + r"0*$"))
 
+        def check_initial_workload(current):
+            for key, value in {
+                "archive_value": "1", "asset_value": "1", "start_year_widget": "2025",
+                "horizon": "100", "retrieval": "1", "discount": "0", "projection_end": "2350",
+            }.items():
+                expect(current.locator(f".st-key-{key} input")).to_have_value(re.compile(r"^" + value + r"(?:\.0+)?$"))
+            for key, value in (("archive_unit", "TB"), ("asset_unit", "GB")):
+                expect(current.locator(f".st-key-{key}").get_by_role("radio", name=value, exact=True, include_hidden=True)).to_be_checked()
+            for key in ("tech_dna", "tech_amazon", "tech_azure", "tech_tape", "log_scale"):
+                expect(current.locator(f".st-key-{key} input")).to_be_checked()
+            expect(current.locator(".st-key-tech_custom input")).not_to_be_checked()
+            expect(current.locator(".st-key-custom_name input")).to_have_value("Custom storage")
+
         def check_navigation(current):
             tabs = current.get_by_role("tab")
             expect(tabs).to_have_count(6)
@@ -71,6 +85,11 @@ def check(url: str, output: Path, channel: str | None) -> None:
 
         page.wait_for_function("window.__dnaFormControls !== undefined")
         check_initial_model_costs(page)
+        check_initial_workload(page)
+        page.reload()
+        expect(page.locator(".js-plotly-plot")).to_have_count(2)
+        page.wait_for_function("window.__dnaFormControls !== undefined")
+        check_initial_workload(page)
         pending(False)
         check_navigation(page)
         initial_frames = len(sent_frames)
@@ -210,16 +229,30 @@ def check(url: str, output: Path, channel: str | None) -> None:
         expect(page.locator("[data-testid=stMetricValue]").first).to_have_text("1 TB")
 
         dark = browser.new_page(viewport={"width": 1440, "height": 1000}, color_scheme="dark")
+        dark.set_default_timeout(30000)
+        def slow_connection(socket):
+            server = socket.connect_to_server()
+            def forward(message):
+                time.sleep(0.01)
+                socket.send(message)
+            server.on_message(forward)
+        dark.route_web_socket("**/_stcore/stream", slow_connection)
         dark.on("pageerror", lambda error: errors.append(str(error)))
         dark.goto(url)
         expect(dark.locator(".theme-dark")).to_be_attached()
         expect(dark.locator(".js-plotly-plot")).to_have_count(2)
         dark.wait_for_function("window.__dnaFormControls !== undefined")
+        expect(dark).to_have_url(re.compile(r"theme=dark"), timeout=30000)
         check_initial_model_costs(dark)
+        check_initial_workload(dark)
         expect(dark.locator(".pending-notice")).to_have_text("Charts up to date")
         dark.locator(".st-key-calculate_header button:visible").click()
         expect(dark).to_have_url(re.compile(r"dna_synthesis_cost_per_mb=16573"))
         check_initial_model_costs(dark)
+        check_initial_workload(dark)
+        dark.reload()
+        expect(dark.locator(".js-plotly-plot")).to_have_count(2, timeout=30000)
+        check_initial_workload(dark)
         shot("first-visit-dark", dark)
         dark.close()
 
@@ -229,6 +262,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
             mobile.goto(url)
             expect(mobile.locator(".js-plotly-plot")).to_have_count(2)
             check_initial_model_costs(mobile)
+            check_initial_workload(mobile)
             mobile.wait_for_timeout(300)
             check_navigation(mobile)
             shot(f"viewport-{width}", mobile)

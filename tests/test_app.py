@@ -42,8 +42,7 @@ class StreamlitAppTests(unittest.TestCase):
 
     def test_model_widgets_start_with_real_defaults_in_the_browser_payload(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
-        defaults = app.session_state["model_input_defaults"]
-        self.assertEqual(len(defaults), 34)
+        defaults = {widget.key: app.session_state["widget_defaults"][widget.key] for widget in app.number_input}
         for key, value in defaults.items():
             with self.subTest(key=key):
                 widget = app.number_input(key=key)
@@ -53,9 +52,28 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertEqual(defaults["dna_synthesis_cost"], Scenario().dna_synthesis_cost_per_mb)
         self.assertEqual(defaults["amazon_storage_per_tb_month"], Scenario().amazon_storage_usd_per_mb_month * 1_000_000)
 
+    def test_all_scenario_widgets_declare_their_initial_values(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        expected = app.session_state["committed_widgets"]
+        seen = set()
+        for kind in ("number_input", "radio", "checkbox", "toggle", "text_input"):
+            for widget in app.get(kind):
+                if widget.key not in expected:
+                    continue
+                with self.subTest(key=widget.key):
+                    value = expected[widget.key]
+                    declared = widget.proto.default
+                    if kind == "radio":
+                        declared = widget.options[declared]
+                    self.assertEqual(declared, value)
+                    self.assertEqual(widget.value, value)
+                    self.assertFalse(widget.proto.set_value)
+                    seen.add(widget.key)
+        self.assertEqual(seen, set(expected))
+
     def test_initial_model_defaults_do_not_overwrite_user_edits(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
-        baseline = dict(app.session_state["model_input_defaults"])
+        baseline = dict(app.session_state["widget_defaults"])
         app.number_input(key="dna_synthesis_cost").set_value(0.0)
         app.number_input(key="amazon_storage_per_tb_month").set_value(12.5)
         self._submit_form(app)
@@ -64,7 +82,65 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertFalse(app.exception)
         self.assertEqual(app.number_input(key="dna_synthesis_cost").value, 0.0)
         self.assertEqual(app.number_input(key="amazon_storage_per_tb_month").value, 12.5)
-        self.assertEqual(app.session_state["model_input_defaults"], baseline)
+        self.assertEqual(app.session_state["widget_defaults"], baseline)
+
+    def test_automatic_theme_sync_preserves_initial_and_pending_inputs(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        before = dict(app.session_state["committed_widgets"])
+        app.number_input(key="archive_value").set_value(2.0)
+        app.radio(key="archive_unit").set_value("PB")
+        self._click_button(app, "theme_auto_dark")
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.number_input(key="archive_value").value, 2.0)
+        self.assertEqual(app.radio(key="archive_unit").value, "PB")
+        self.assertEqual(app.number_input(key="horizon").value, 100)
+        self.assertEqual(app.radio(key="asset_unit").value, "GB")
+        self.assertTrue(app.checkbox(key="tech_dna").value)
+        self.assertEqual(app.session_state["committed_widgets"], before)
+        self.assertEqual(app.query_params["theme"], ["dark"])
+
+    def test_small_workload_values_are_not_displayed_as_zero(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20)
+        app.query_params["archive_size_tb"] = "0.001"
+        app.query_params["average_asset_size_mb"] = "0.001"
+        app.run()
+        self.assertFalse(app.exception)
+        for key in ("archive_value", "asset_value"):
+            widget = app.number_input(key=key)
+            self.assertEqual(widget.proto.format % widget.value, "0.001")
+        self._submit_form(app)
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.session_state["committed_widgets"]["archive_value"], 0.001)
+
+    def test_shared_workload_defaults_survive_reload_and_theme_changes(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20)
+        app.query_params.update({
+            "archive_size_tb": "3000", "average_asset_size_mb": "500",
+            "horizon_years": "50", "annual_retrieval_percent": "0.25",
+            "technologies": "Tape On-premise,Custom storage", "log_scale": "False",
+            "custom_storage_name": "Shared archive", "theme": "dark",
+        })
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.number_input(key="archive_value").proto.default, 3.0)
+        self.assertEqual(app.radio(key="archive_unit").proto.default, 1)
+        self.assertFalse(app.checkbox(key="tech_dna").proto.default)
+        self.assertTrue(app.checkbox(key="tech_custom").proto.default)
+        self.assertFalse(app.toggle(key="log_scale").proto.default)
+        self.assertEqual(app.text_input(key="custom_name").proto.default, "Shared archive")
+        before = dict(app.session_state["committed_widgets"])
+        self._click_button(app, "theme_toggle")
+        app.run()
+        self._submit_form(app)
+        app.run()
+        self.assertEqual(app.session_state["committed_widgets"], before)
+        reloaded = AppTest.from_file(str(self.APP_PATH), default_timeout=20)
+        reloaded.query_params.update(app.query_params)
+        reloaded.run()
+        self.assertFalse(reloaded.exception)
+        self.assertEqual(reloaded.session_state["committed_widgets"], before)
 
     def test_shared_model_prices_are_initial_widget_defaults(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20)
