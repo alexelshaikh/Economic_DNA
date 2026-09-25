@@ -115,7 +115,7 @@ class SensitivityChartTests(unittest.TestCase):
         bar = figure.data[0]
         for base, width, low, high in zip(bar.base, bar.x, frame.sort_values("swing")["low_cost"], frame.sort_values("swing")["high_cost"]):
             self.assertAlmostEqual(base, min(low, high))
-            self.assertAlmostEqual(base + width, max(low, high))
+            self.assertAlmostEqual(base + width, max(low, high), delta=max(1e-9, abs(high) * 1e-12))
 
     def test_empty_frame_does_not_raise(self):
         scenario = Scenario(technologies=("Amazon Deep Archive",))

@@ -59,12 +59,12 @@ PALETTES = {
         "figure": {
             "font_color": "#b7c4c0",
             "title_color": "#e7edeb",
-            "plot_bgcolor": "#171f20",
+            "plot_bgcolor": "#17191d",
             "legend_font_color": "#b7c4c0",
             "axis_line": "#38464a",
             "tick_color": "#93a19d",
             "axis_title_color": "#b7c4c0",
-            "grid_color": "#232e31",
+            "grid_color": "#30343c",
             "hover_bgcolor": "#0b1112",
             "hover_font_color": "#e7edeb",
         },
@@ -246,12 +246,20 @@ def _apply_cost_axis_format(figure: go.Figure) -> None:
     range to them, so extreme inputs cannot produce Plotly's mixed
     decade/minor-tick labels or an unlabelled edge."""
     values = _trace_y_values(figure)
+    has_zero = any(
+        value == 0 for trace in figure.data if getattr(trace, "y", None) is not None
+        for value in trace.y
+    )
     if not values:
+        if has_zero:
+            figure.update_yaxes(type="linear", range=[-0.05, 1], tickvals=[0, 0.5, 1], ticktext=["0", "0.5", "1"])
         return
     minimum, maximum = min(values), max(values)
     if figure.layout.yaxis.type == "log":
         tickvals, axis_range = _log_ticks(minimum, maximum)
     else:
+        if has_zero:
+            minimum = 0.0
         stacked_bars = bool(figure.data) and all(
             trace.type == "bar" for trace in figure.data
         )
@@ -465,15 +473,20 @@ def style_figure(figure: go.Figure, theme: str = DEFAULT_THEME) -> go.Figure:
     palette = palette_for(theme)
     colors = palette["figure"]
     technology_colors = palette["technology_colors"]
+    if figure.layout.showlegend is not False:
+        figure.update_layout(
+            legend={"y": -0.22, "yanchor": "top"},
+            margin={"t": 54, "b": 108},
+        )
     figure.update_layout(
         template="plotly_white",
         font={
-            "family": "Aptos, Segoe UI, Arial, sans-serif",
-            "size": 13,
+            "family": "Segoe UI, Arial, sans-serif",
+            "size": 15,
             "color": colors["font_color"],
         },
         title={"x": 0.5, "xanchor": "center"},
-        title_font={"size": 21, "color": colors["title_color"]},
+        title_font={"size": 19, "color": colors["title_color"]},
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor=colors["plot_bgcolor"],
         colorway=list(technology_colors.values()),
@@ -658,6 +671,7 @@ def breakeven_chart(
 
     reachable = frame[frame["breakeven_synthesis_cost_usd_per_mb"].notna()]
     unreachable = frame[frame["breakeven_synthesis_cost_usd_per_mb"].isna()]
+    log_scale = current_synthesis_cost > 0
     values = [current_synthesis_cost]
     if not reachable.empty:
         breakeven = reachable["breakeven_synthesis_cost_usd_per_mb"]
@@ -665,7 +679,8 @@ def breakeven_chart(
         highs = breakeven.clip(lower=current_synthesis_cost)
         # Zero-cost breakeven cannot sit on a log axis; nudge it to a visible
         # sliver instead of dropping the bar.
-        floor = current_synthesis_cost / 1e6 if current_synthesis_cost > 0 else 1e-9
+        positive = breakeven[breakeven > 0].tolist() + [current_synthesis_cost]
+        floor = min(positive) / 100 if log_scale else 0.0
         lows = lows.clip(lower=floor)
 
         hover_lines = []
@@ -681,12 +696,14 @@ def breakeven_chart(
                     f"price to match {row.technology}"
                 )
             elif breakeven_value > current_synthesis_cost:
-                headroom = breakeven_value / current_synthesis_cost if current_synthesis_cost > 0 else float("inf")
-                headroom_text = _tick_labels([headroom])[0]
-                direction = (
-                    f"Already cheaper than {row.technology} today -- synthesis could rise "
-                    f"{headroom_text}x before losing that edge"
-                )
+                if current_synthesis_cost == 0:
+                    direction = f"Already cheaper than {row.technology} with free synthesis"
+                else:
+                    headroom_text = _tick_labels([breakeven_value / current_synthesis_cost])[0]
+                    direction = (
+                        f"Already cheaper than {row.technology} today -- synthesis could rise "
+                        f"{headroom_text}x before losing that edge"
+                    )
             else:
                 direction = f"Exactly at parity with {row.technology} today"
             hover_lines.append(f"Break-even synthesis cost: {breakeven_text}/MB<br>{direction}")
@@ -743,10 +760,13 @@ def breakeven_chart(
         # widen a couple of decades around "current" rather than rendering a
         # zero-width axis with the marker pinned to one edge.
         values = [max(current_synthesis_cost, 1e-9) / 100, max(current_synthesis_cost, 1e-9) * 100]
-    tickvals, axis_range = _log_ticks(min(values), max(values))
+    tickvals, axis_range = (
+        _log_ticks(min(values), max(values)) if log_scale
+        else _linear_ticks(0.0, max(values), baseline_zero=True)
+    )
     if tickvals:
         figure.update_xaxes(
-            type="log",
+            type="log" if log_scale else "linear",
             tickmode="array",
             tickvals=tickvals,
             ticktext=_tick_labels(tickvals),

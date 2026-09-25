@@ -14,12 +14,40 @@ years, source metadata, and CSV/PNG/SVG downloads.
 Run it locally:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-app.txt
 streamlit run streamlit_app.py
 ```
 
 The paper baseline is 1 TB stored as 1,000 assets of 1 GB each, with 1% of the assets retrieved
 per year for 100 years. A 100-year horizon includes the start year through start year + 99.
+
+The **Example scenarios** menu includes a **1 PB preservation archive, rare retrieval** workload:
+100 years of retention and 0.001% annual retrieval. With baseline cost assumptions, all three
+built-in alternatives have reachable synthesis break-even prices in the Sensitivity tab.
+Presets populate workload inputs; press Calculate to update the results. Other edited cost
+assumptions are retained. Changed inputs are highlighted and Calculate becomes **Update charts**
+until a successful calculation, or until the inputs match the last calculation again.
+
+Default prices, price base years, and durability values are read from `assumptions.yaml` when
+the process starts. Restart the app after editing that file. The historical fits and editable
+DNA prices remain separate assumptions; a workload preset does not change those prices.
+
+### Small-server performance
+
+The app renders only the active analysis tab. Tab changes and chart options run within a
+Streamlit fragment. Presets, resets, price multipliers, and manual input edits update the
+pending form locally without a server request. Calculate validates and commits the inputs.
+The browser form helpers target the pinned Streamlit 1.63 widget markup and are covered by
+the browser checks below; Python action callbacks remain available as a fallback.
+CSV files are generated
+on download; PNG and SVG images are exported in the browser. The largest shared result cache
+is limited to eight scenarios with a ten-minute expiry.
+
+Start-year projections reuse each cost stream's decline factor, sensitivity evaluates only
+DNA costs, and uncertainty sampling processes 256 years at a time. The Docker image disables
+file watching, limits numeric-library threads to one, and enables WebSocket compression.
+These settings reduce per-user work and memory use; actual concurrent capacity depends on
+the server and workloads.
 
 ### Docker Compose
 
@@ -59,6 +87,16 @@ Run all automated checks with:
 ```bash
 python -m unittest discover -v
 ```
+
+For browser interaction checks, first install `requirements-dev.txt`, start the app, then run:
+
+```bash
+python -m playwright install chromium
+python scripts/browser_check.py
+```
+
+An installed Edge browser can be used with `python scripts/browser_check.py --channel msedge`
+without downloading Chromium. Screenshots and downloaded charts are written to `.tmp/browser-check`.
 
 This repository contains the code and data accompanying the paper **“An Economic Analysis of DNA-based Data Storage Systems.”** It provides fully reproducible notebooks for all main-text and supplementary figures, along with scripts and utilities to fetch and cache datasets.
 

@@ -25,4 +25,10 @@ PRESET_SCENARIOS: dict[str, Scenario] = {
         annual_retrieval_percent=2.0,
         horizon_years=15,
     ),
+    "1 PB preservation archive, rare retrieval": Scenario(
+        archive_size_tb=1_000.0,
+        average_asset_size_mb=1000.0,
+        annual_retrieval_percent=0.001,
+        horizon_years=100,
+    ),
 }

@@ -29,7 +29,11 @@ class SimulationResult:
 
 
 def _decline_factor(percent: float, year: np.ndarray, anchor_year: float) -> np.ndarray:
-    return np.power(1 - percent / 100, year - anchor_year)
+    try:
+        with np.errstate(over="raise", invalid="raise"):
+            return np.power(1 - percent / 100, year - anchor_year)
+    except FloatingPointError as error:
+        raise ValueError("The decline rate and price base year produce costs beyond the numeric range. Reduce the rate or move the base year closer to the archive start.") from error
 
 
 def _replacement_mask(years: np.ndarray, start_year: int, durability: int) -> np.ndarray:
@@ -155,6 +159,8 @@ def simulate_scenario(scenario: Scenario) -> SimulationResult:
 
     for technology in scenario.technologies:
         write, read, maintenance = CALCULATORS[technology](scenario, years, assumptions)
+        if not np.isfinite([write, read, maintenance]).all():
+            raise ValueError("These prices and archive size produce costs beyond the numeric range. Reduce the price or archive size.")
         frame = pd.DataFrame(
             {
                 "technology_key": technology,
@@ -192,6 +198,8 @@ def simulate_scenario(scenario: Scenario) -> SimulationResult:
     )
     totals["total_cost_per_tb_usd"] = totals["total_cost_usd"] / scenario.archive_size_tb
     totals["present_value_per_tb_usd"] = totals["present_value_usd"] / scenario.archive_size_tb
+    if not np.isfinite(totals.select_dtypes("number")).all().all():
+        raise ValueError("The total cost exceeds the numeric range. Reduce the price, archive size, or retention period.")
     return SimulationResult(scenario, yearly, totals, model_metadata())
 
 
@@ -201,31 +209,49 @@ def simulate_start_years(scenario: Scenario, final_start_year: int) -> pd.DataFr
     if final_start_year > 2500:
         raise ValueError("final_start_year must not exceed 2500")
     assumptions = load_assumptions()
-    rows: list[dict[str, float | int | str]] = []
-    for year in range(scenario.start_year, final_start_year + 1):
-        current = scenario.with_start_year(year)
-        years = np.arange(year, year + current.horizon_years, dtype=int)
-        discount = np.power(1 + current.discount_rate_percent / 100, years - year)
-        for technology in current.technologies:
-            write, read, maintenance = CALCULATORS[technology](current, years, assumptions)
-            total = write + read + maintenance
-            rows.append(
-                {
-                    "start_year": year,
-                    "technology_key": technology,
-                    "technology": _technology_label(current, technology),
-                    "write_cost_usd": float(write.sum()),
-                    "read_cost_usd": float(read.sum()),
-                    "maintenance_cost_usd": float(maintenance.sum()),
-                    "total_cost_usd": float(total.sum()),
-                    "present_value_usd": float((total / discount).sum()),
-                    "total_cost_per_tb_usd": float(total.sum() / current.archive_size_tb),
-                    "present_value_per_tb_usd": float(
-                        (total / discount).sum() / current.archive_size_tb
-                    ),
-                }
+    start_years = np.arange(scenario.start_year, final_start_year + 1)
+    years = np.arange(scenario.start_year, scenario.start_year + scenario.horizon_years)
+    discount = np.power(1 + scenario.discount_rate_percent / 100, -(years - scenario.start_year))
+    rates = {
+        "DNA": (scenario.synthesis_decline_percent, scenario.sequencing_decline_percent, 0.0),
+        "Amazon Deep Archive": (scenario.amazon_decline_percent,) * 3,
+        "Azure Blob Archive": (scenario.azure_decline_percent,) * 3,
+        "Tape On-premise": (scenario.tape_media_decline_percent, 0.0, scenario.tape_energy_decline_percent),
+        "Custom storage": (scenario.custom_decline_percent,) * 3,
+    }
+    frames = []
+    # Moving the start year leaves the relative replacement/discount schedule
+    # unchanged. Scale each cost stream once instead of simulating every horizon.
+    for technology in scenario.technologies:
+        costs = list(CALCULATORS[technology](scenario, years, assumptions))
+        streams = list(zip(COMPONENTS, costs, rates[technology]))
+        if technology == "Tape On-premise":
+            energy = scenario.archive_size_tb * scenario.tape_energy_usd_per_tb_year * _decline_factor(
+                scenario.tape_energy_decline_percent, years, scenario.tape_price_base_year
             )
-    return pd.DataFrame(rows)
+            hardware = scenario.archive_size_tb * scenario.tape_hardware_usd_per_tb / scenario.tape_durability_years * _decline_factor(
+                scenario.tape_hardware_decline_percent, years, scenario.tape_price_base_year
+            )
+            streams[-1] = ("maintenance_cost_usd", energy, scenario.tape_energy_decline_percent)
+            streams.append(("maintenance_cost_usd", hardware, scenario.tape_hardware_decline_percent))
+        values = {component: np.zeros(len(start_years)) for component in COMPONENTS}
+        present_value = np.zeros(len(start_years))
+        for component, cost, rate in streams:
+            factor = _decline_factor(rate, start_years, scenario.start_year)
+            values[component] += cost.sum() * factor
+            present_value += np.dot(cost, discount) * factor
+        total = sum(values.values())
+        frames.append(pd.DataFrame({
+            "start_year": start_years,
+            "technology_key": technology,
+            "technology": _technology_label(scenario, technology),
+            **values,
+            "total_cost_usd": total,
+            "present_value_usd": present_value,
+            "total_cost_per_tb_usd": total / scenario.archive_size_tb,
+            "present_value_per_tb_usd": present_value / scenario.archive_size_tb,
+        }))
+    return pd.concat(frames, ignore_index=True).sort_values("start_year", kind="stable").reset_index(drop=True)
 
 
 def simulate_dna_unit_costs(scenario: Scenario, final_year: int) -> pd.DataFrame:
@@ -360,32 +386,25 @@ def simulate_dna_uncertainty_band(
         sampled = base_percent * (1 + rng.uniform(-relative_spread, relative_spread, n_samples))
         return np.clip(sampled, 0.0, 99.999)[:, None]
 
-    synthesis_factor = _decline_factor(
-        _sampled_decline(scenario.synthesis_decline_percent), years[None, :], scenario.dna_cost_base_year
-    )
-    sequencing_factor = _decline_factor(
-        _sampled_decline(scenario.sequencing_decline_percent), years[None, :], scenario.dna_cost_base_year
-    )
-    replacements = _replacement_mask(years, scenario.start_year, scenario.dna_durability_years)
-
-    write = (
-        scenario.dna_synthesis_cost_per_mb
-        * synthesis_factor
-        * scenario.archive_size_mb
-        * replacements[None, :]
-    )
-    read = (
-        scenario.dna_sequencing_cost_per_mb
-        * sequencing_factor
-        * scenario.archive_size_mb
-        * scenario.annual_retrieval_percent
-        / 100
-    )
-    total = write + read
-    if use_present_value:
-        discount = np.power(1 + scenario.discount_rate_percent / 100, years - scenario.start_year)
-        total = total / discount[None, :]
-
-    cumulative = np.cumsum(total, axis=1)
-    p10, p50, p90 = np.quantile(cumulative, [0.1, 0.5, 0.9], axis=0)
+    synthesis_rates = _sampled_decline(scenario.synthesis_decline_percent)
+    sequencing_rates = _sampled_decline(scenario.sequencing_decline_percent)
+    percentiles = np.empty((3, len(years)))
+    carried_total = np.zeros(n_samples)
+    # Keep only a small time window per sample in memory, including for a
+    # 10,000-year archive. Carry the same cumulative sum across windows.
+    for offset in range(0, len(years), 256):
+        window = years[offset:offset + 256]
+        total = _decline_factor(synthesis_rates, window[None, :], scenario.dna_cost_base_year)
+        total *= scenario.dna_synthesis_cost_per_mb * scenario.archive_size_mb
+        total *= _replacement_mask(window, scenario.start_year, scenario.dna_durability_years)
+        reads = _decline_factor(sequencing_rates, window[None, :], scenario.dna_cost_base_year)
+        reads *= scenario.dna_sequencing_cost_per_mb * scenario.archive_size_mb * scenario.annual_retrieval_percent / 100
+        total += reads
+        if use_present_value:
+            total *= np.power(1 + scenario.discount_rate_percent / 100, -(window - scenario.start_year))
+        total[:, 0] += carried_total
+        np.cumsum(total, axis=1, out=total)
+        carried_total = total[:, -1].copy()
+        percentiles[:, offset:offset + len(window)] = np.quantile(total, [0.1, 0.5, 0.9], axis=0)
+    p10, p50, p90 = percentiles
     return pd.DataFrame({"year": years, "p10": p10, "p50": p50, "p90": p90})

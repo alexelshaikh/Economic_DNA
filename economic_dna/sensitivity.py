@@ -4,11 +4,12 @@ when one input is perturbed while everything else stays fixed."""
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import math
 
 import pandas as pd
 
 from .scenario import Scenario
-from .simulation import simulate_scenario
+from .simulation import _dna_synthesis_linear_terms
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,14 +54,24 @@ def _perturbed_value(base: float, sign: int, spec: SensitivityParameter) -> floa
     return max(candidate, 0.0)
 
 
-def _dna_cost(scenario: Scenario, value_column: str, fallback: float) -> float:
-    try:
-        totals = simulate_scenario(scenario).totals.set_index("technology_key")
-    except ValueError:
-        return fallback
-    if "DNA" not in totals.index:
-        return fallback
-    return float(totals.loc["DNA", value_column])
+def _dna_cost(scenario: Scenario, use_present_value: bool) -> float:
+    coefficient, fixed = _dna_synthesis_linear_terms(scenario, use_present_value)
+    return coefficient * scenario.dna_synthesis_cost_per_mb + fixed
+
+
+def _bounded_value(scenario: Scenario, spec: SensitivityParameter, sign: int) -> float | int:
+    candidate = _perturbed_value(getattr(scenario, spec.field), sign, spec)
+    if spec.field == "dna_durability_years":
+        return max(1, round(candidate))
+    if spec.field == "archive_size_tb":
+        return min(1_000_000_000.0, max(scenario.average_asset_size_mb / 1_000_000, candidate))
+    if spec.field == "average_asset_size_mb":
+        return min(scenario.archive_size_mb, candidate)
+    if spec.field == "annual_retrieval_percent":
+        return min(10_000.0, candidate)
+    if spec.field.endswith("_percent"):
+        return min(math.nextafter(100.0, 0.0), candidate)
+    return candidate
 
 
 def dna_cost_sensitivity(
@@ -74,16 +85,14 @@ def dna_cost_sensitivity(
     if "DNA" not in scenario.technologies:
         return pd.DataFrame(columns=SENSITIVITY_COLUMNS)
 
-    value_column = "present_value_usd" if use_present_value else "total_cost_usd"
-    baseline = _dna_cost(scenario, value_column, fallback=0.0)
+    baseline = _dna_cost(scenario, use_present_value)
 
     rows = []
     for spec in parameters:
-        base_value = getattr(scenario, spec.field)
-        low_value = _perturbed_value(base_value, -1, spec)
-        high_value = _perturbed_value(base_value, 1, spec)
-        low_cost = _dna_cost(replace(scenario, **{spec.field: low_value}), value_column, baseline)
-        high_cost = _dna_cost(replace(scenario, **{spec.field: high_value}), value_column, baseline)
+        low_value = _bounded_value(scenario, spec, -1)
+        high_value = _bounded_value(scenario, spec, 1)
+        low_cost = _dna_cost(replace(scenario, **{spec.field: low_value}), use_present_value)
+        high_cost = _dna_cost(replace(scenario, **{spec.field: high_value}), use_present_value)
         rows.append(
             {
                 "parameter": spec.label,

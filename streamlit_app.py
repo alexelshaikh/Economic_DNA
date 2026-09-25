@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+from pathlib import Path
 import pandas as pd
 import streamlit as st
 
@@ -51,1582 +52,17 @@ _main_dg = get_dg_singleton_instance().main_dg
 # before the normal cleanup point, so each run must begin outside that form.
 _main_dg._form_data = None
 
-st.markdown(
-    """
-    <style>
-    :root {
-        --canvas: #eef2f0;
-        --surface: #ffffff;
-        --surface-subtle: #e6ece9;
-        --sidebar-bg: #f8faf9;
-        --ink: #18211f;
-        --ink-soft: #34413d;
-        --muted: #5f6e68;
-        --line: #d9e0dc;
-        --line-strong: #c2ccc7;
-        --accent: #bd4b38;
-        --accent-strong: #963829;
-        --accent-soft: #faece8;
-        --accent-glow: rgba(189, 75, 56, 0.32);
-        --action-bg: #bd4b38;
-        --action-bg-hover: #963829;
-        --action-text: #ffffff;
-        --teal: #1f716a;
-        --gold: #b78322;
-        --chip-bg: #f6ecd8;
-        --chip-border: #e3cf9e;
-        --chip-text: #8a6414;
-        --download-text: #40504b;
-        --scroll-thumb: #c2ccc7;
-        --header-bg: rgba(238, 242, 240, 0.96);
-        --shadow-sm: 0 1px 3px rgba(24, 33, 31, 0.07);
-        --shadow-md: 0 3px 10px rgba(24, 33, 31, 0.14);
-        --shadow-lg: 0 8px 22px rgba(24, 33, 31, 0.16);
-        --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
-    }
-    /* The dark palette applies when the Python-rendered theme marker carries
-       theme-dark: the system preference decides the initial theme, and the
-       sidebar toggle (or a shared URL) overrides it after. */
-    html:has(.theme-marker.theme-dark) {
-        --canvas: #0f1516;
-        --surface: #171f20;
-        --surface-subtle: #1e282a;
-        --sidebar-bg: #121a1b;
-        --ink: #e7edeb;
-        --ink-soft: #c3cfcb;
-        --muted: #93a19d;
-        --line: #273234;
-        --line-strong: #38464a;
-        --accent: #d96a52;
-        --accent-strong: #e58a74;
-        --accent-soft: #3a231e;
-        --accent-glow: rgba(217, 106, 82, 0.35);
-        --action-bg: #c9533b;
-        --action-bg-hover: #d96a52;
-        --action-text: #ffffff;
-        --teal: #45a694;
-        --gold: #d4a63e;
-        --chip-bg: #3a3018;
-        --chip-border: #5a4a24;
-        --chip-text: #e6c77e;
-        --download-text: #aab9b4;
-        --scroll-thumb: #38464a;
-        --header-bg: rgba(15, 21, 22, 0.96);
-        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
-        --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.55);
-        --shadow-lg: 0 8px 22px rgba(0, 0, 0, 0.65);
-        /* Streamlit theme tokens, so its own widgets follow the dark theme. */
-        --background-color: #0f1516;
-        --secondary-background-color: #171f20;
-        --text-color: #e7edeb;
-        --primary-color: #d96a52;
-        --border-color: #273234;
-    }
+@st.cache_data(show_spinner=False, max_entries=1)
+def _stylesheet(modified_ns: int) -> str:
+    return (Path(__file__).parent / "economic_dna" / "ui.css").read_text(encoding="utf-8")
 
-    /* Dark-mode fixes for Streamlit widgets whose emotion styles are compiled
-       from the light theme config and ignore the CSS variables. */
-    html:has(.theme-marker.theme-dark) .stButton button,
-    html:has(.theme-marker.theme-dark) .stDownloadButton button {
-        background: var(--surface);
-        border-color: var(--line);
-        color: var(--ink);
-    }
-    html:has(.theme-marker.theme-dark) .stButton button:hover,
-    html:has(.theme-marker.theme-dark) .stDownloadButton button:hover {
-        border-color: var(--accent);
-        color: var(--accent-strong);
-    }
-    html:has(.theme-marker.theme-dark) [data-testid="stTooltipIcon"] {
-        color: var(--accent) !important;
-    }
-    /* The expand-control icon is compiled from the light theme (60% dark ink,
-       ignoring CSS vars) — invisible on the dark "Edit inputs" pill. */
-    html:has(.theme-marker.theme-dark) [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
-        color: var(--ink) !important;
-        -webkit-text-fill-color: var(--ink) !important;
-    }
-    html:has(.theme-marker.theme-dark) [data-testid="stTooltipIcon"]:hover {
-        color: var(--accent-strong) !important;
-    }
-    /* Streamlit's .icon class hardcodes a dark stroke; the "?" is drawn with
-       stroke, not fill, so the stroke color itself must be overridden. */
-    html:has(.theme-marker.theme-dark) [data-testid="stTooltipIcon"] svg {
-        stroke: var(--accent) !important;
-        stroke-width: 2.4;
-    }
-    /* The running indicator is drawn in dark ink and disappears on the dark
-       header; brighten it to the dark theme's ink color. */
-    html:has(.theme-marker.theme-dark) [data-testid="stStatusWidgetRunningIcon"] svg,
-    html:has(.theme-marker.theme-dark) [data-testid="stStatusWidget"] span {
-        color: var(--ink) !important;
-    }
-    html:has(.theme-marker.theme-dark) [data-testid="stStatusWidgetRunningIcon"] svg {
-        filter: drop-shadow(0 0 4px rgba(231, 237, 235, 0.35));
-    }
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] input[data-testid="stNumberInputField"],
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stSelectbox"] input,
-    html:has(.theme-marker.theme-dark) .st-key-cost-panel input[data-testid="stNumberInputField"],
-    html:has(.theme-marker.theme-dark) .st-key-cost-panel input[data-testid="stTextInputField"] {
-        color: var(--ink) !important;
-        -webkit-text-fill-color: var(--ink) !important;
-    }
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stNumberInputStepUp"],
-    html:has(.theme-marker.theme-dark) section[data-testid="stSidebar"] [data-testid="stNumberInputStepDown"],
-    html:has(.theme-marker.theme-dark) .st-key-cost-panel [data-testid="stNumberInputStepUp"],
-    html:has(.theme-marker.theme-dark) .st-key-cost-panel [data-testid="stNumberInputStepDown"] {
-        color: var(--muted) !important;
-    }
-    html:has(.theme-marker.theme-dark) div:has(> [role="listbox"]) {
-        background: var(--surface) !important;
-        border: 1px solid var(--line-strong) !important;
-    }
-    html:has(.theme-marker.theme-dark) [role="listbox"] [role="option"] {
-        background: transparent !important;
-        color: var(--ink) !important;
-    }
-    html:has(.theme-marker.theme-dark) [role="listbox"] [role="option"]:hover,
-    html:has(.theme-marker.theme-dark) [role="listbox"] [role="option"][aria-selected="true"] {
-        background: var(--surface-subtle) !important;
-    }
 
-    html, body {
-        font-family: "Aptos", "Segoe UI", Arial, sans-serif;
-        letter-spacing: 0;
-        /* Real phones inflate/boost font sizes on pages without this, which
-           blows up fixed-size layouts and clips content. */
-        -webkit-text-size-adjust: 100%;
-        text-size-adjust: 100%;
-    }
-    .stApp {
-        background: var(--canvas);
-        color: var(--ink);
-        font-family: "Aptos", "Segoe UI", Arial, sans-serif;
-        transition: background-color 0.3s var(--ease), color 0.3s var(--ease);
-    }
-    [data-testid="stHeader"] {
-        background: var(--header-bg);
-        /* No backdrop-filter: at 0.96-alpha the blur is imperceptible, and the
-           filter makes Chromium re-rasterize fixed elements layered above the
-           header (the Calculate button) on every rerun — a visible flicker. */
-        border-bottom: 1px solid var(--line);
-        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
-    }
-    /* Theme toggle pinned to the page header, just left of Streamlit's toolbar
-       menu (which occupies the rightmost 48px of the header). The running
-       indicator sits immediately to the toggle's left instead of overlapping
-       it. */
-    .st-key-theme-toggle-anchor .stButton button {
-        position: fixed;
-        right: 3.9rem;
-        top: 0.7rem;
-        width: fit-content !important;
-        z-index: 999990;
-    }
-    [data-testid="stStatusWidget"] {
-        position: fixed !important;
-        right: 9.9rem !important;
-        top: 0.7rem !important;
-        z-index: 999990;
-    }
-    .block-container {
-        max-width: 1440px;
-        /* Right gutter reserves space for the floating cost-assumption rail. */
-        padding: 4.75rem 5.4rem 4rem 2.2rem;
-    }
+@st.cache_data(show_spinner=False, max_entries=1)
+def _form_script(modified_ns: int) -> str:
+    return (Path(__file__).parent / "economic_dna" / "form_controls.js").read_text(encoding="utf-8")
 
-    h1, h2, h3, p { letter-spacing: 0; }
-    h1 {
-        color: var(--ink);
-        font-size: 2.15rem;
-        line-height: 1.14;
-        margin: 0.15rem 0 0.35rem;
-    }
-    h2 { color: var(--ink); font-size: 1.25rem; }
-    h3 { color: var(--ink); font-size: 1.05rem; }
-    [data-testid="stCaptionContainer"] {
-        color: var(--muted);
-        font-size: 0.86rem;
-        line-height: 1.55;
-    }
 
-    section[data-testid="stSidebar"] {
-        width: 460px !important;
-        background: var(--sidebar-bg);
-        border-right: 1px solid var(--line);
-        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
-    }
-    section[data-testid="stSidebar"] > div { width: 460px !important; }
-    section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
-        overflow-x: hidden;
-        overflow-y: auto;
-        padding: 0.55rem 0.7rem 1.5rem 1.2rem;
-    }
-    section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
-        height: 2.15rem !important;
-        min-height: 2.15rem !important;
-        padding: 0.15rem 0 0 !important;
-        margin-bottom: 0;
-    }
-    section[data-testid="stSidebar"] [data-testid="stLogoSpacer"] {
-        height: 1.9rem !important;
-        min-height: 1.9rem !important;
-    }
-    section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        padding-bottom: 1.5rem;
-    }
-    .sidebar-kicker, .page-kicker, .workspace-kicker, .export-label {
-        color: var(--accent);
-        font-size: 0.72rem;
-        font-weight: 750;
-        line-height: 1.2;
-        letter-spacing: 0;
-        text-transform: uppercase;
-    }
-    .sidebar-title {
-        color: var(--ink);
-        font-size: 1.35rem;
-        font-weight: 720;
-        line-height: 1.25;
-        margin: 0.22rem 0 0.35rem;
-    }
-    .sidebar-copy {
-        color: var(--muted);
-        font-size: 0.86rem;
-        line-height: 1.5;
-        margin: 0 0 0.9rem;
-    }
-    .sidebar-section {
-        border-top: 1px solid var(--line);
-        color: var(--ink);
-        font-size: 0.77rem;
-        font-weight: 720;
-        letter-spacing: 0;
-        margin: 1.1rem 0 0.65rem;
-        padding-top: 0.9rem;
-        text-transform: uppercase;
-    }
-    section[data-testid="stSidebar"] label p,
-    .st-key-cost-panel label p {
-        color: var(--ink-soft);
-        font-size: 0.82rem;
-        font-weight: 600;
-    }
-    .log-scale-label {
-        color: var(--ink-soft);
-        font-size: 0.82rem;
-        font-weight: 600;
-        margin: 0 0 0.3rem;
-    }
-    section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"],
-    section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input),
-    .st-key-cost-panel [data-testid="stNumberInputContainer"] {
-        background: var(--surface);
-        border-color: var(--line-strong);
-        border-radius: 6px;
-    }
-    /* Text inputs render borderless in 1.63 — the visible border goes on the
-       INNER root element so it contains only the text box, not the label
-       (both themes via the vars). */
-    .st-key-cost-panel [data-testid="stTextInputRootElement"] {
-        background: var(--surface);
-        border: 1px solid var(--line-strong);
-        border-radius: 6px;
-    }
-    section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"]:focus-within,
-    section[data-testid="stSidebar"] [data-testid="stSelectbox"] div:has(> input):focus-within,
-    .st-key-cost-panel [data-testid="stNumberInputContainer"]:focus-within {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 1px var(--accent);
-    }
-    /* The focus ring goes on the text BOX, not the wrapper (which also
-       contains the label — a ring there would outline "Display name" too). */
-    .st-key-cost-panel [data-testid="stTextInputRootElement"]:focus-within {
-        border-color: var(--accent);
-        box-shadow: 0 0 0 1px var(--accent);
-    }
-    section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
-        background: var(--surface);
-        border-color: var(--line);
-        border-radius: 6px;
-    }
-
-    .stButton button, .stDownloadButton button {
-        border-radius: 8px;
-        font-weight: 650;
-        min-height: 2.35rem;
-        transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease,
-            transform 90ms ease, box-shadow 120ms ease;
-    }
-    .stButton button:hover, .stDownloadButton button:hover {
-        border-color: var(--accent);
-        color: var(--accent-strong);
-    }
-    .stButton button:active, .stDownloadButton button:active {
-        transform: translateY(1px) scale(0.985);
-    }
-    [data-testid="stFormSubmitButton"] button {
-        min-height: 2.75rem;
-        background: var(--accent);
-        border-color: var(--accent);
-        color: #ffffff;
-        font-weight: 700;
-    }
-    [data-testid="stFormSubmitButton"] button:hover {
-        background: var(--accent-strong);
-        border-color: var(--accent-strong);
-        color: #ffffff;
-    }
-    /* Two-column sidebar: the left column holds all inputs and the right
-       column holds only the Calculate button on narrow layouts. On desktop
-       the rail is hidden and the sidebar itself scrolls, so preset/reset
-       controls above the form cannot reduce the visible bottom of the form. */
-    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) {
-        align-items: stretch;
-        gap: 0.7rem !important;
-    }
-    /* Note the child combinator: a descendant selector would also match the
-       first column of every inner st.columns() row inside the input column,
-       stretching each widget row to the full visible height. */
-    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
-    > [data-testid="stColumn"]:first-child {
-        height: auto;
-        overflow-y: visible;
-        overscroll-behavior-y: contain;
-        padding: 0 0 1.5rem;
-        scrollbar-gutter: stable;
-    }
-    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
-    > [data-testid="stColumn"]:first-child::-webkit-scrollbar {
-        width: 8px;
-    }
-    section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
-    > [data-testid="stColumn"]:first-child::-webkit-scrollbar-thumb {
-        background: var(--scroll-thumb);
-        border-radius: 4px;
-    }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail {
-        flex: 0 0 auto;
-        height: calc(100vh - 82px);
-        min-height: calc(100vh - 82px);
-        overflow: visible;
-        position: relative;
-        z-index: 1;
-    }
-    /* Percentage heights cannot resolve here (the rail sits in a flex-content-
-       sized column), so the button fills the rail with absolute positioning
-       instead of a height: 100% chain. */
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail
-    [data-testid="stElementContainer"] {
-        position: absolute;
-        inset: 0;
-    }
-    @keyframes pending-pulse {
-        0%, 100% { box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.22),
-            0 0 0 0 var(--accent-glow); }
-        55% { box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.22),
-            0 0 0 6px transparent; }
-    }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button {
-        align-items: center;
-        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
-        border-color: var(--action-bg);
-        border-radius: 8px;
-        box-shadow: var(--shadow-md);
-        color: var(--action-text);
-        display: flex;
-        flex-direction: column;
-        inset: 0;
-        justify-content: space-between;
-        padding: 1rem 0.45rem;
-        position: absolute;
-        transition: filter 140ms ease, transform 90ms ease, box-shadow 140ms ease;
-    }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button:hover {
-        filter: brightness(1.09);
-        transform: translateY(-1px);
-        box-shadow: var(--shadow-lg);
-    }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button:active {
-        filter: brightness(0.94);
-        transform: translateY(1px) scale(0.992);
-        box-shadow: var(--shadow-sm);
-    }
-    .pending-marker { display: none; }
-    [data-testid="stMarkdownContainer"]:has(.theme-marker) { display: none; }
-    .st-key-theme_auto_dark,
-    [data-testid="stElementContainer"]:has(.st-key-theme_auto_dark) {
-        display: none;
-    }
-    /* The 1x1 utility iframes (theme sync, click-away) would otherwise render
-       as tiny bordered dashes in the main flow. Hidden, but their scripts
-       still load and run. */
-    [data-testid="stIFrame"] {
-        display: none;
-    }
-    section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"],
-    [data-testid="stExpandSidebarButton"],
-    [data-testid="stSidebarCollapsedControl"] {
-        pointer-events: auto !important;
-        z-index: 5 !important;
-    }
-    /* When the sidebar is collapsed its content slides off-canvas but still
-       overlaps the main area (the sidebar section keeps a high z-index), so
-       the pinned button would paint over the main content and the header
-       would intercept clicks aimed at the expand control. Hide the rail and
-       let pointer events pass through to the main area. */
-    section[data-testid="stSidebar"][aria-expanded="false"] .st-key-scenario-action-rail {
-        visibility: hidden;
-    }
-    section[data-testid="stSidebar"][aria-expanded="false"] [data-testid="stSidebarContent"] {
-        pointer-events: none;
-    }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail
-    [data-testid="stFormSubmitButton"] button::before,
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail
-    [data-testid="stFormSubmitButton"] button::after {
-        content: "\\2192";
-        display: block;
-        flex: 0 0 auto;
-        font-family: "Segoe UI Symbol", sans-serif;
-        font-size: 1.55rem;
-        line-height: 1;
-    }
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button p {
-        font-size: 1.3rem;
-        font-weight: 700;
-        line-height: 1.2;
-        white-space: nowrap;
-        writing-mode: vertical-rl;
-        transform: rotate(180deg);
-    }
-    .stDownloadButton button {
-        background: var(--surface);
-        border-color: var(--line);
-        color: var(--download-text);
-    }
-    [class*="st-key-download_"] .stButton button,
-    [class*="st-key-download_"] button {
-        background: var(--surface);
-        border-color: var(--line);
-        color: var(--download-text);
-    }
-    .chart-loading {
-        align-items: center;
-        background:
-            linear-gradient(90deg, transparent 0%, color-mix(in srgb, var(--surface-subtle) 70%, transparent) 48%, transparent 96%),
-            var(--surface);
-        background-size: 220% 100%, 100% 100%;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        box-sizing: border-box;
-        display: flex;
-        justify-content: center;
-        margin: 0.35rem 0 0.85rem;
-        min-height: 240px;
-        overflow: hidden;
-        position: relative;
-        width: 100%;
-        animation: chart-loading-sheen 1.25s var(--ease) infinite;
-    }
-    .chart-loading::before {
-        color: var(--muted);
-        content: "Loading chart";
-        font-size: 0.82rem;
-        font-weight: 650;
-    }
-    @keyframes chart-loading-sheen {
-        0% { background-position: 150% 0, 0 0; }
-        100% { background-position: -70% 0, 0 0; }
-    }
-
-    /* On desktop the sidebar's Calculate is hidden: the wide centered header
-       button is the single always-visible Calculate (phones keep the bar,
-       see the 640px media query). */
-    section[data-testid="stSidebar"] .st-key-scenario-action-rail {
-        display: none;
-    }
-    .st-key-calculate-anchor,
-    .st-key-copy-link-anchor,
-    .st-key-global-reset-btn {
-        --header-calc-width: clamp(18rem, 34vw, 30rem);
-        --header-calc-half: clamp(9rem, 17vw, 15rem);
-        --header-side-width: 10.75rem;
-        --header-action-gap: 0.65rem;
-    }
-    /* Header Calculate: pinned to the top bar with the copy-link action
-       beside it. It pulses while changes are pending. */
-    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button {
-        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
-        border: none;
-        border-radius: 12px;
-        box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-        color: var(--action-text);
-        font-size: 1.05rem;
-        font-weight: 700;
-        gap: 0.55rem;
-        left: 50%;
-        letter-spacing: 0.03em;
-        min-height: 2.6rem;
-        position: fixed;
-        top: 0.7rem;
-        transform: translateX(-50%) translateZ(0);
-        width: var(--header-calc-width) !important;
-        z-index: 999990;
-        /* Own compositing layer: reruns repaint the content below, and a
-           promoted layer keeps the button from blinking along with it. */
-        will-change: transform;
-    }
-    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button::before,
-    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button::after {
-        content: "↓";
-        font-size: 1.05rem;
-        font-weight: 700;
-        line-height: 1;
-    }
-    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button:hover {
-        box-shadow: var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.22);
-        filter: brightness(1.07);
-        transform: translateX(-50%) translateZ(0) translateY(-1px);
-    }
-    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button:active {
-        transform: translateX(-50%) translateZ(0) translateY(1px) scale(0.99);
-    }
-    /* During a rerun Streamlit disables buttons; keep the header button
-       visually identical so the disabled state never reads as a blink. */
-    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button[disabled],
-    .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button:disabled {
-        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%) !important;
-        color: var(--action-text) !important;
-        opacity: 1 !important;
-    }
-    html:has(.theme-marker.theme-dark) .st-key-calculate-anchor [data-testid="stFormSubmitButton"] button {
-        background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
-        color: var(--action-text);
-    }
-    .st-key-copy-link-anchor .stButton button {
-        background: var(--surface);
-        border: 1px solid var(--line-strong);
-        border-radius: 12px;
-        box-shadow: var(--shadow-sm);
-        color: var(--download-text);
-        font-size: 0.86rem;
-        font-weight: 700;
-        right: calc(50% + var(--header-calc-half) + var(--header-action-gap));
-        min-height: 2.6rem;
-        padding: 0 0.85rem;
-        position: fixed;
-        top: 0.7rem;
-        width: var(--header-side-width) !important;
-        z-index: 999990;
-    }
-    .st-key-copy-link-anchor .stButton button:hover {
-        background: var(--surface-subtle);
-        border-color: var(--accent);
-        box-shadow: var(--shadow-md);
-        color: var(--accent-strong);
-        transform: translateY(-1px);
-    }
-    .st-key-copy-link-anchor .stButton button:active {
-        box-shadow: var(--shadow-sm);
-        transform: translateY(1px) scale(0.99);
-    }
-    /* Radio tab text: the option's inner text div is compiled from the light
-       theme (dark ink) and ignores the label color — inherit it instead. */
-    html:has(.theme-marker.theme-dark) .st-key-cost-rail [role="radiogroup"] label div {
-        color: inherit !important;
-    }
-    /* The custom-name text input can paint a light-theme (or autofill) white
-       box inside the dark panel — force the dark surface on the input itself,
-       including Chrome's autofill overlay. */
-    html:has(.theme-marker.theme-dark) .st-key-cost-panel [data-testid="stTextInput"] input {
-        background: var(--surface) !important;
-        -webkit-box-shadow: inset 0 0 0 1000px var(--surface) !important;
-    }
-    html:has(.theme-marker.theme-dark) .st-key-cost-panel [data-testid="stTextInput"] input:-webkit-autofill {
-        -webkit-box-shadow: inset 0 0 0 1000px var(--surface) !important;
-        -webkit-text-fill-color: var(--ink) !important;
-    }
-    /* The panel's Calculate bar (phones only — the header button covers
-       desktop) sits sticky at the bottom of the scrolling panel sheet. */
-    .st-key-calculate_panel {
-        display: none;
-    }
-    html:has(.theme-marker.theme-dark) .st-key-calculate_panel [data-testid="stFormSubmitButton"] button {
-        background: var(--action-bg);
-        border-color: var(--action-bg);
-        color: var(--action-text);
-    }
-
-    /* Cost-assumption rail: a compact model switcher pinned to the edge.
-       The panel stays mounted and animates with opacity/transform so both
-       opening and closing feel smooth while form edits stay intact. */
-    .st-key-cost-rail {
-        background: color-mix(in srgb, var(--surface) 94%, transparent);
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        box-shadow: var(--shadow-md);
-        padding: 0.38rem;
-        position: fixed;
-        right: 0.75rem;
-        top: 5.05rem;
-        z-index: 999900;
-        width: 8.5rem;
-    }
-    .st-key-cost-rail [data-testid="stVerticalBlock"] {
-        gap: 0.28rem !important;
-    }
-    .st-key-cost-rail [data-testid="stElementContainer"] {
-        width: 100% !important;
-    }
-    .st-key-cost-rail [role="radiogroup"] {
-        flex-direction: column;
-        gap: 0.28rem !important;
-        width: 100%;
-    }
-    .st-key-cost-rail [role="radiogroup"] label {
-        align-items: center;
-        background: transparent;
-        border: 1px solid transparent;
-        border-radius: 11px;
-        box-shadow: none;
-        color: var(--muted);
-        cursor: pointer;
-        display: flex;
-        box-sizing: border-box;
-        font-size: 0.7rem;
-        font-weight: 700;
-        gap: 0.4rem;
-        justify-content: flex-start;
-        letter-spacing: 0;
-        margin: 0 !important;
-        min-height: 2.7rem;
-        overflow: hidden;
-        padding: 0.28rem 0.36rem;
-        position: relative;
-        text-transform: none;
-        transform: none;
-        transition: border-color 160ms var(--ease), background-color 160ms var(--ease),
-            color 160ms var(--ease), transform 120ms var(--ease), box-shadow 160ms var(--ease);
-        user-select: none;
-        white-space: nowrap;
-        width: 100%;
-        writing-mode: horizontal-tb;
-    }
-    /* The ✕ option is the radio's "closed" state and must remain in the group,
-       but it is completely invisible: the panel closes by clicking the open
-       tab again or clicking away, so no visible close button is needed. The
-       synthesized closeLabel.click() in the click-away script still works on
-       a display:none label. */
-    .st-key-cost-rail [role="radiogroup"] label:has(input[value="0"]) {
-        display: none;
-    }
-    .st-key-cost-rail [role="radiogroup"] label:has(input:focus-visible) {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
-    }
-    /* Compact badges make each storage model scannable without relying only
-       on the text label. */
-    .st-key-cost-rail [role="radiogroup"] label::before {
-        align-items: center;
-        background: var(--surface-subtle);
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        color: var(--ink-soft);
-        content: "";
-        display: flex;
-        flex: 0 0 1.45rem;
-        font-size: 0.64rem;
-        font-weight: 800;
-        height: 1.45rem;
-        justify-content: center;
-        line-height: 1;
-        transition: background-color 160ms var(--ease), border-color 160ms var(--ease),
-            color 160ms var(--ease), transform 160ms var(--ease);
-        width: 1.45rem;
-    }
-    .st-key-cost-rail [role="radiogroup"] label:has(input[value="1"])::before { content: "DNA"; }
-    .st-key-cost-rail [role="radiogroup"] label:has(input[value="2"])::before { content: "S3"; }
-    .st-key-cost-rail [role="radiogroup"] label:has(input[value="3"])::before { content: "AZ"; }
-    .st-key-cost-rail [role="radiogroup"] label:has(input[value="4"])::before { content: "LTO"; }
-    .st-key-cost-rail [role="radiogroup"] label:has(input[value="5"])::before { content: "+"; }
-    .st-key-cost-rail [role="radiogroup"] label::after {
-        background: var(--accent);
-        border-radius: 999px;
-        content: "";
-        height: 0.36rem;
-        margin-left: auto;
-        opacity: 0;
-        transform: scale(0.4);
-        transition: opacity 160ms var(--ease), transform 160ms var(--ease);
-        width: 0.36rem;
-    }
-    .st-key-cost-rail [role="radiogroup"] label:hover {
-        background: var(--surface-subtle);
-        border-color: var(--accent);
-        color: var(--accent-strong);
-        transform: translateX(-2px);
-    }
-    .st-key-cost-rail [role="radiogroup"] label:active {
-        transform: translateX(-1px) scale(0.985);
-    }
-    /* The open tab flattens against the panel: same surface, no left corner,
-       accent ink and an accent bar mark the active model. */
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-rail label:has(input[value="1"]),
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-rail label:has(input[value="2"]),
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-rail label:has(input[value="3"]),
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-rail label:has(input[value="4"]),
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-rail label:has(input[value="5"]) {
-        background: var(--accent-soft);
-        border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-        color: var(--accent-strong);
-        box-shadow: inset 3px 0 0 var(--accent);
-        transform: translateX(-3px);
-    }
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-rail label:has(input[value="1"])::before,
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-rail label:has(input[value="2"])::before,
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-rail label:has(input[value="3"])::before,
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-rail label:has(input[value="4"])::before,
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-rail label:has(input[value="5"])::before {
-        background: var(--accent);
-        border-color: var(--accent);
-        color: #ffffff;
-        transform: scale(1.04);
-    }
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-rail label:has(input[value="1"])::after,
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-rail label:has(input[value="2"])::after,
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-rail label:has(input[value="3"])::after,
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-rail label:has(input[value="4"])::after,
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-rail label:has(input[value="5"])::after {
-        opacity: 1;
-        transform: scale(1);
-    }
-    .st-key-cost-panel {
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 16px;
-        box-shadow: var(--shadow-lg);
-        /* Hidden by default: during initial hydration the radio has no
-           selection yet, and the :checked-based hide rule cannot match —
-           a default-visible panel flashes for those first frames. */
-        display: flex;
-        flex-direction: column;
-        max-height: calc(100vh - 7rem);
-        opacity: 0;
-        overflow-y: auto;
-        pointer-events: none;
-        padding: 1.1rem 1.15rem 1.2rem;
-        position: fixed;
-        right: 9.85rem;
-        top: 5.05rem;
-        transform: translateX(1.2rem) scale(0.985);
-        transition: opacity 220ms var(--ease), transform 260ms var(--ease),
-            visibility 0s linear 260ms, border-color 180ms var(--ease);
-        visibility: hidden;
-        width: min(27rem, calc(100vw - 11.5rem));
-        z-index: 999900;
-    }
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel,
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel,
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel,
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel,
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel {
-        opacity: 1;
-        pointer-events: auto;
-        transform: none;
-        transition-delay: 0s;
-        visibility: visible;
-    }
-    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_dna),
-    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_amazon),
-    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_azure),
-    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_tape),
-    .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_custom) {
-        display: none;
-    }
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_dna),
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_amazon),
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_azure),
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_tape),
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel [data-testid="stLayoutWrapper"]:has(.st-key-cost_model_custom) {
-        display: block;
-        animation: cost-model-in 210ms var(--ease) both;
-    }
-    @keyframes cost-model-in {
-        from { opacity: 0; transform: translateY(6px); }
-        to { opacity: 1; transform: none; }
-    }
-    /* The panel title follows the checked tab; the default title shows when
-       the panel is closed. */
-    .st-key-cost-panel .cost-panel-title { display: none; }
-    body:has(.st-key-cost_model_radio input[value="0"]:checked) .st-key-cost-panel .cost-title-none { display: block; }
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel .cost-title-dna { display: block; }
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel .cost-title-amazon { display: block; }
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel .cost-title-azure { display: block; }
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel .cost-title-tape { display: block; }
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel .cost-title-custom { display: block; }
-
-    /* Simple/Advanced: price base years, durability, and replacement cycles
-       are hidden by default across every cost panel. Unit costs and decline
-       rates -- the inputs that actually drive the cost projections -- are
-       never wrapped in an "advanced-" container, so they always stay
-       visible regardless of this toggle. */
-    [class*="st-key-advanced-"] { display: none; }
-    body:has(.st-key-sidebar-advanced-toggle input:checked) [class*="st-key-advanced-"] {
-        display: block;
-    }
-
-    .st-key-cost-panel .cost-panel-title {
-        color: var(--ink);
-        font-size: 1.2rem;
-        font-weight: 720;
-        line-height: 1.3;
-        margin: 0.15rem 2.4rem 0.35rem 0;
-    }
-    .st-key-cost-panel .cost-panel-deck {
-        color: var(--muted);
-        font-size: 0.84rem;
-        line-height: 1.5;
-        margin: 0;
-    }
-    .st-key-cost-panel .cost-panel-header {
-        background: linear-gradient(180deg, var(--surface-subtle), transparent 115%);
-        border-bottom: 1px solid var(--line);
-        margin: -1.1rem -1.15rem 1rem;
-        padding: 1.05rem 1.15rem 0.95rem;
-        position: sticky;
-        top: -1.1rem;
-        z-index: 1;
-    }
-    .st-key-cost-panel .cost-panel-summary {
-        display: none;
-        flex-wrap: wrap;
-        gap: 0.35rem;
-        margin-top: 0.7rem;
-    }
-    body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel .cost-summary-dna,
-    body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel .cost-summary-amazon,
-    body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel .cost-summary-azure,
-    body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel .cost-summary-tape,
-    body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel .cost-summary-custom {
-        display: flex;
-    }
-    .st-key-cost-panel .cost-panel-summary span {
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        color: var(--ink-soft);
-        font-size: 0.72rem;
-        font-weight: 650;
-        line-height: 1.2;
-        padding: 0.28rem 0.5rem;
-    }
-    .st-key-cost-panel [data-testid="stCaptionContainer"] {
-        background: var(--surface-subtle);
-        border: 1px solid var(--line);
-        border-radius: 7px;
-        color: var(--teal);
-        font-size: 0.72rem;
-        font-weight: 750;
-        line-height: 1.2;
-        margin: 0.75rem 0 0.35rem;
-        padding: 0.34rem 0.5rem;
-        text-transform: uppercase;
-    }
-    .st-key-cost-panel [data-testid="stNumberInput"],
-    .st-key-cost-panel [data-testid="stTextInput"] {
-        margin-bottom: 0.18rem;
-    }
-    .st-key-sidebar-presets .stButton button {
-        align-items: flex-start;
-        background: var(--surface) !important;
-        border: 1px solid var(--accent) !important;
-        border-radius: 8px;
-        box-shadow: var(--shadow-sm), inset 0 -1px 0 rgba(24, 33, 31, 0.08);
-        color: var(--ink);
-        cursor: pointer;
-        justify-content: flex-start;
-        min-height: 3.75rem;
-        overflow: hidden;
-        padding: 0.58rem 3.2rem 0.58rem 0.85rem;
-        position: relative;
-        text-align: left;
-        transition: background 160ms var(--ease), border-color 160ms var(--ease),
-            box-shadow 160ms var(--ease), transform 160ms var(--ease);
-        white-space: normal;
-        width: 100%;
-    }
-    .st-key-sidebar-presets .stButton button::before {
-        background: var(--accent);
-        content: "";
-        inset: 0 auto 0 0;
-        position: absolute;
-        width: 4px;
-    }
-    .st-key-sidebar-presets .stButton button::after {
-        background: var(--accent);
-        border-radius: 999px;
-        color: var(--action-text);
-        content: "Load";
-        font-size: 0.68rem;
-        font-weight: 800;
-        line-height: 1;
-        padding: 0.34rem 0.48rem;
-        position: absolute;
-        right: 0.62rem;
-        top: 0.66rem;
-        text-transform: uppercase;
-    }
-    .st-key-sidebar-presets .stButton button:hover {
-        background: var(--accent-soft) !important;
-        border-color: var(--accent);
-        box-shadow: var(--shadow-md);
-        color: var(--accent-strong);
-        transform: translateY(-1px);
-    }
-    .st-key-sidebar-presets .stButton button:active {
-        box-shadow: var(--shadow-sm);
-        transform: translateY(0);
-    }
-    .st-key-sidebar-presets .stButton button p {
-        color: inherit;
-        font-size: 0.82rem;
-        font-weight: 700;
-        line-height: 1.32;
-        margin: 0;
-        white-space: pre-line;
-    }
-    /* Reset buttons synchronize Streamlit's widget state without updating the
-       committed scenario or refreshing charts. */
-    .st-key-sidebar-reset-btn .stButton button {
-        background: transparent;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        color: var(--muted);
-        cursor: pointer;
-        display: block;
-        font-size: 0.9rem;
-        font-weight: 650;
-        min-height: 2.35rem;
-        padding: 0 1rem;
-        width: 100%;
-    }
-    .st-key-sidebar-reset-btn .stButton button:hover {
-        background: var(--surface-subtle);
-        border-color: var(--accent);
-        color: var(--accent-strong);
-    }
-    .st-key-global-reset-btn .stButton button {
-        background: var(--surface);
-        border: 1px solid var(--line-strong);
-        border-radius: 12px;
-        box-shadow: var(--shadow-sm);
-        color: var(--download-text);
-        cursor: pointer;
-        font-size: 0.86rem;
-        font-weight: 700;
-        left: calc(50% + var(--header-calc-half) + var(--header-action-gap));
-        min-height: 2.6rem;
-        padding: 0 0.85rem;
-        position: fixed;
-        top: 0.7rem;
-        white-space: nowrap;
-        width: var(--header-side-width) !important;
-        z-index: 999990;
-    }
-    .st-key-global-reset-btn .stButton button:hover {
-        background: var(--surface-subtle);
-        border-color: var(--accent);
-        box-shadow: var(--shadow-md);
-        color: var(--accent-strong);
-        transform: translateY(-1px);
-    }
-    .st-key-global-reset-btn .stButton button:active {
-        box-shadow: var(--shadow-sm);
-        transform: translateY(1px) scale(0.99);
-    }
-    /* Per-model resets sit inside the active cost panel and restore only that
-       model's editable assumptions. */
-    .st-key-cost-panel [class*="st-key-model-reset-"] [data-testid="stFormSubmitButton"] {
-        display: flex;
-        justify-content: flex-end;
-    }
-    .st-key-cost-panel [class*="st-key-model-reset-"] [data-testid="stFormSubmitButton"] button {
-        background: transparent;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        color: var(--muted);
-        cursor: pointer;
-        display: block;
-        font-size: 0.85rem;
-        font-weight: 650;
-        margin: 0 0 0.7rem auto;
-        min-height: 2.4rem;
-        padding: 0 1.1rem;
-        width: auto;
-    }
-    .st-key-cost-panel [class*="st-key-model-reset-"] [data-testid="stFormSubmitButton"] button:hover {
-        background: var(--surface-subtle);
-        border-color: var(--accent);
-        color: var(--accent-strong);
-    }
-    /* Order-of-magnitude steppers directly under the DNA synthesis and
-       sequencing cost inputs: a compact paired row, not full-size buttons. */
-    [class*="st-key-steppers-"] { margin: -0.6rem 0 0.9rem; }
-    [class*="st-key-steppers-"] [data-testid="stFormSubmitButton"] button {
-        font-size: 0.78rem;
-        min-height: 1.9rem;
-        padding: 0 0.4rem;
-    }
-
-    .page-kicker { margin-bottom: 0.35rem; }
-    .page-deck {
-        color: var(--muted);
-        font-size: 1rem;
-        line-height: 1.55;
-        margin: 0 0 1.15rem;
-        max-width: 760px;
-    }
-    .model-strip {
-        align-items: center;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-left: 3px solid var(--accent);
-        border-radius: 12px;
-        color: var(--muted);
-        display: flex;
-        flex-wrap: wrap;
-        font-size: 0.8rem;
-        gap: 0.35rem 0;
-        margin: 0 0 1.25rem;
-        min-height: 42px;
-        padding: 0.65rem 0.85rem;
-        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
-    }
-    .model-strip strong { color: var(--ink); font-weight: 700; }
-    .model-strip a {
-        color: var(--accent-strong);
-        font-weight: 700;
-        text-decoration: none;
-    }
-    .model-strip a:hover { text-decoration: underline; }
-    .model-item {
-        border-right: 1px solid var(--line);
-        margin-right: 0.75rem;
-        padding-right: 0.75rem;
-    }
-    .model-item:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
-    .scenario-bar {
-        align-items: center;
-        background: var(--surface-subtle);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        color: var(--muted);
-        display: flex;
-        flex-wrap: wrap;
-        font-size: 0.82rem;
-        gap: 0.45rem 1.15rem;
-        margin: 0 0 1rem;
-        min-height: 44px;
-        padding: 0.65rem 0.85rem;
-        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
-    }
-    .scenario-bar strong { color: var(--ink); }
-    .scenario-label { color: var(--teal); font-weight: 750; text-transform: uppercase; }
-    @keyframes chip-in {
-        from { opacity: 0; transform: translateX(-5px); }
-        to { opacity: 1; transform: none; }
-    }
-    @keyframes fade-up {
-        from { opacity: 0; transform: translateY(7px); }
-        to { opacity: 1; transform: none; }
-    }
-    [data-testid="stMetric"] {
-        animation: fade-up 0.45s var(--ease) both;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        box-shadow: var(--shadow-sm);
-        min-height: 114px;
-        overflow: hidden;
-        padding: 0.95rem 1rem;
-        position: relative;
-        transition: transform 160ms var(--ease), box-shadow 160ms var(--ease),
-            background-color 0.3s var(--ease), border-color 0.3s var(--ease);
-    }
-    [data-testid="stMetric"]:hover {
-        box-shadow: var(--shadow-md);
-        transform: translateY(-2px);
-    }
-    [data-testid="stMetric"]::before {
-        background: linear-gradient(90deg, var(--accent) 0%, var(--gold) 130%);
-        content: "";
-        height: 3px;
-        left: 0;
-        position: absolute;
-        right: 0;
-        top: 0;
-    }
-    [data-testid="stMetricLabel"] p {
-        color: var(--muted);
-        font-size: 0.79rem;
-        font-weight: 650;
-        line-height: 1.35;
-        white-space: normal;
-    }
-    [data-testid="stMetricValue"] {
-        color: var(--ink);
-        font-size: 1.48rem;
-        font-weight: 700;
-        line-height: 1.2;
-    }
-    button:focus-visible, input:focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 2px;
-    }
-    [data-testid="stMetricDelta"] { color: var(--muted); }
-
-    .workspace-kicker { margin: 1.55rem 0 0.35rem; }
-    div[data-testid="stTabs"] div[role="tablist"] {
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        box-shadow: var(--shadow-sm);
-        gap: 0.3rem;
-        margin: 0 0 1.2rem;
-        max-width: 100%;
-        overflow-x: auto;
-        padding: 0.3rem;
-        width: fit-content;
-    }
-    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"] {
-        background: transparent;
-        border: 0;
-        border-radius: 9px;
-        color: var(--muted);
-        flex: 0 0 auto;
-        font-weight: 650;
-        min-height: 48px;
-        padding: 0.7rem 1.35rem;
-        transition: background-color 140ms ease, color 140ms ease;
-    }
-    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"] p {
-        font-size: 1rem;
-    }
-    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"]:hover {
-        background: var(--surface-subtle);
-        color: var(--ink);
-    }
-    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"][aria-selected="true"] {
-        background: var(--action-bg);
-        color: var(--action-text);
-        font-weight: 700;
-    }
-    div[data-testid="stTabs"] div[data-testid="stTab"][role="tab"][aria-selected="true"] p {
-        color: var(--action-text);
-    }
-    div[data-testid="stTabs"] .react-aria-SelectionIndicator,
-    div[data-testid="stTabs"] div[data-baseweb="tab-highlight"],
-    div[data-testid="stTabs"] div[data-baseweb="tab-border"] { display: none; }
-
-    .tab-intro { margin: 0.15rem 0 1rem; max-width: 900px; }
-    .tab-intro h2 {
-        font-size: 1.18rem;
-        line-height: 1.3;
-        margin: 0 0 0.25rem;
-    }
-    .tab-intro p {
-        color: var(--muted);
-        font-size: 0.88rem;
-        line-height: 1.55;
-        margin: 0;
-    }
-    .chart-divider {
-        border-top: 1px solid var(--line);
-        margin: 1.65rem 0 1rem;
-        padding-top: 1.15rem;
-    }
-    .chart-divider h3 { font-size: 1rem; margin: 0 0 0.2rem; }
-    .chart-divider p { color: var(--muted); font-size: 0.84rem; margin: 0; }
-    div[data-testid="stPlotlyChart"] {
-        animation: fade-up 0.5s var(--ease) both;
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        box-shadow: var(--shadow-sm);
-        overflow: hidden;
-        padding: 0.2rem;
-        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease),
-            box-shadow 160ms var(--ease);
-    }
-    div[data-testid="stPlotlyChart"]:hover {
-        box-shadow: var(--shadow-md);
-    }
-    .contract-card {
-        background: var(--surface);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        box-shadow: var(--shadow-sm);
-        overflow: hidden;
-        transition: background-color 0.3s var(--ease), border-color 0.3s var(--ease);
-    }
-    .contract-table {
-        border-collapse: collapse;
-        font-size: 0.88rem;
-        width: 100%;
-    }
-    .contract-table th, .contract-table td {
-        border-bottom: 1px solid var(--line);
-        padding: 0.55rem 0.8rem;
-        text-align: left;
-        vertical-align: top;
-    }
-    .contract-table th {
-        color: var(--muted);
-        font-size: 0.76rem;
-        font-weight: 750;
-        text-transform: uppercase;
-    }
-    .contract-table td:first-child { color: var(--muted); font-weight: 650; }
-    .contract-table td:last-child { color: var(--ink); }
-    .contract-table tbody tr:hover { background: var(--surface-subtle); }
-    .contract-table tbody tr:last-child td { border-bottom: 0; }
-    .export-label { color: var(--muted); margin: 0.65rem 0 0.35rem; }
-    section[data-testid="stMain"]::-webkit-scrollbar,
-    [data-testid="stMainBlockContainer"]::-webkit-scrollbar {
-        width: 10px;
-    }
-    section[data-testid="stMain"]::-webkit-scrollbar-thumb,
-    [data-testid="stMainBlockContainer"]::-webkit-scrollbar-thumb {
-        background: var(--scroll-thumb);
-        border-radius: 5px;
-    }
-    section[data-testid="stMain"]::-webkit-scrollbar-track,
-    [data-testid="stMainBlockContainer"]::-webkit-scrollbar-track {
-        background: transparent;
-    }
-
-    @media (max-width: 1200px) {
-        .st-key-calculate-anchor,
-        .st-key-copy-link-anchor,
-        .st-key-global-reset-btn {
-            --header-calc-width: clamp(15rem, 35vw, 24rem);
-            --header-calc-half: clamp(7.5rem, 17.5vw, 12rem);
-            --header-side-width: 8.75rem;
-            --header-action-gap: 0.5rem;
-        }
-    }
-
-    @media (max-width: 900px) {
-        section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div {
-            width: min(460px, 94vw) !important;
-        }
-        section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) {
-            gap: 0.5rem !important;
-        }
-        .block-container { padding: 4.5rem 5.4rem 3rem 1rem; }
-        .model-item { border-right: 0; }
-        /* 16px inputs stop iOS Safari auto-zooming into the field on focus
-           (below 16px it zooms; this also covers phones in landscape). */
-        section[data-testid="stSidebar"] input,
-        .st-key-cost-panel input {
-            font-size: 16px !important;
-        }
-        /* Main columns stack whenever the main area is narrow (Streamlit only
-           wraps them on the narrowest screens, which leaves landscape phones
-           and small tablets with squashed multi-column rows), and the metric
-           row re-grids two-per-line. Streamlit's mobile column min-width
-           (calc(100% - 24px)) would keep each metric card full-width, so it
-           is zeroed here; the gap is pinned so the 50% basis arithmetic is
-           deterministic. */
-        [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"] {
-            flex-wrap: wrap !important;
-        }
-        [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]
-        > [data-testid="stColumn"] {
-            flex: 1 1 100% !important;
-        }
-        [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
-            flex-wrap: wrap !important;
-            gap: 0.75rem !important;
-        }
-        [data-testid="stMainBlockContainer"] [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"])
-        > [data-testid="stColumn"] {
-            flex: 1 1 calc(50% - 0.375rem) !important;
-            min-width: 0 !important;
-            max-width: calc(50% - 0.375rem) !important;
-        }
-    }
-    @media (max-width: 640px) {
-        /* Phones: the sidebar becomes a full-width overlay sheet. Streamlit's
-           responsive columns wrap the input column and the Calculate rail
-           onto separate rows, which pushes the rail below the non-scrolling
-           sidebar content and leaves Calculate unreachable. Force the rail's
-           row into a column instead: the inputs scroll in the space above,
-           and Calculate becomes a compact horizontal bar at the bottom — a
-           fixed-height flex sibling, the same pattern as the desktop rail.
-           flex: 0 0 auto defeats Streamlit's flex: 1 1 0% (flex-basis 0
-           overrides the height), max-width: none beats its 90vw mobile cap,
-           and 100dvh tracks the mobile URL bar better than 100vh. */
-        section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div {
-            width: 100vw !important;
-        }
-        section[data-testid="stSidebar"] {
-            max-width: none !important;
-        }
-        section[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
-            overflow-y: auto;
-            padding-bottom: 5rem;
-        }
-        section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail) {
-            flex: 0 0 auto !important;
-            flex-direction: column !important;
-            flex-wrap: nowrap !important;
-            height: auto;
-            gap: 0.6rem !important;
-        }
-        section[data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:has(.st-key-scenario-action-rail)
-        > [data-testid="stColumn"]:first-child {
-            flex: 1 1 auto !important;
-            height: auto !important;
-            min-height: 0;
-            overflow-y: visible;
-            padding: 0 0 1rem;
-        }
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail {
-            flex: 0 0 auto !important;
-            height: auto !important;
-            min-height: 0 !important;
-        }
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail
-        [data-testid="stElementContainer"] {
-            position: static;
-            inset: auto;
-        }
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button {
-            align-items: center;
-            flex-direction: row;
-            gap: 0.65rem;
-            inset: auto;
-            justify-content: center;
-            padding: 0.8rem 1rem;
-            position: static;
-        }
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail .stButton button p {
-            font-size: 1.1rem;
-            white-space: nowrap;
-            writing-mode: horizontal-tb;
-            transform: none;
-        }
-        /* Streamlit collapses the sidebar with a fixed -300px translate; with
-           this 100vw sheet that leaves a 90px sliver painted over the main
-           content at z-index 999991. Hide the collapsed section outright (the
-           expand control lives in the header, not the sidebar). */
-        section[data-testid="stSidebar"][aria-expanded="false"] {
-            visibility: hidden;
-            transform: translateX(-100vw) !important;
-        }
-        /* Touch devices have no hover: keep the sidebar's close control
-           visible so the sheet can always be dismissed. */
-        section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"] {
-            visibility: visible;
-        }
-        /* The expand control is a bare 28px icon on the header — too easy to
-           miss on a phone. Give it a labeled pill so the scenario builder is
-           discoverable. */
-        [data-testid="stExpandSidebarButton"] {
-            align-items: center;
-            background: var(--surface);
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            box-shadow: var(--shadow-sm);
-            display: flex;
-            gap: 0.45rem;
-            min-height: 2.5rem;
-            min-width: 2.5rem;
-            padding: 0 0.85rem;
-        }
-        [data-testid="stExpandSidebarButton"]::after {
-            content: "Edit inputs";
-            color: var(--ink);
-            font-size: 0.9rem;
-            font-weight: 650;
-        }
-
-        /* Guards for real devices: no sideways scroll (an overflowing widget
-           makes iOS/Android scroll the page right on focus, clipping the
-           left edge), inputs that can shrink instead of overflowing the
-           sheet, and metric values that wrap instead of clipping. */
-        html, body { overflow-x: hidden; }
-        section[data-testid="stSidebar"] [data-testid="stNumberInputContainer"],
-        section[data-testid="stSidebar"] [data-testid="stSelectbox"],
-        section[data-testid="stSidebar"] input {
-            min-width: 0;
-        }
-        [data-testid="stMetricValue"], [data-testid="stMetricValue"] p {
-            white-space: normal !important;
-            overflow-wrap: anywhere;
-        }
-        /* Phones: the cost rail becomes a horizontal tab strip pinned to the
-           bottom edge, and the panel opens upward as a bottom sheet. Extra
-           bottom padding keeps the page content clear of the strip. */
-        .st-key-cost-rail {
-            bottom: 0.6rem;
-            left: 0.6rem;
-            right: 0.6rem;
-            top: auto;
-            width: auto;
-        }
-        .st-key-cost-rail [data-testid="stVerticalBlock"] {
-            flex-direction: row !important;
-            gap: 0.35rem !important;
-        }
-        .st-key-cost-rail [data-testid="stElementContainer"] {
-            flex: 1;
-            width: auto;
-        }
-        .st-key-cost-rail [role="radiogroup"] {
-            flex-direction: row !important;
-            flex-wrap: nowrap !important;
-            gap: 0.3rem !important;
-        }
-        .st-key-cost-rail [role="radiogroup"] label {
-            border-radius: 999px;
-            border-right: 1px solid var(--line);
-            box-shadow: var(--shadow-sm);
-            flex: 1 1 0;
-            font-size: 0.62rem;
-            height: 2.6rem;
-            min-height: 2.6rem;
-            min-width: 0;
-            padding: 0 0.3rem;
-            transform: none;
-            width: auto;
-            writing-mode: horizontal-tb;
-        }
-        .st-key-cost-rail [role="radiogroup"] label:has(input[value="0"]) {
-            flex: 0 0 2.4rem;
-            font-size: 0.85rem;
-            padding: 0 0.5rem;
-        }
-        .st-key-cost-rail [role="radiogroup"] label:has(input[value="0"])::after {
-            content: none;
-            margin-left: 0;
-        }
-        body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-rail label:has(input[value="1"]),
-        body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-rail label:has(input[value="2"]),
-        body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-rail label:has(input[value="3"]),
-        body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-rail label:has(input[value="4"]),
-        body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-rail label:has(input[value="5"]) {
-            background: linear-gradient(168deg, var(--action-bg) 0%, var(--action-bg-hover) 130%);
-            border-color: var(--action-bg);
-            border-left: 1px solid var(--action-bg);
-            color: var(--action-text);
-            box-shadow: var(--shadow-sm);
-            transform: translateY(-2px);
-        }
-        .st-key-cost-rail [role="radiogroup"] label::after {
-            content: "";
-            margin-left: auto;
-            margin-top: 0;
-        }
-        .st-key-cost-rail [role="radiogroup"] label:active {
-            transform: translateY(1px) scale(0.985);
-        }
-        .st-key-cost-panel {
-            bottom: 4.6rem;
-            left: 0.6rem;
-            max-height: 55vh;
-            right: 0.6rem;
-            top: auto;
-            transform: translateY(1.2rem) scale(0.99);
-            width: auto;
-        }
-        body:has(.st-key-cost_model_radio input[value="1"]:checked) .st-key-cost-panel,
-        body:has(.st-key-cost_model_radio input[value="2"]:checked) .st-key-cost-panel,
-        body:has(.st-key-cost_model_radio input[value="3"]:checked) .st-key-cost-panel,
-        body:has(.st-key-cost_model_radio input[value="4"]:checked) .st-key-cost-panel,
-        body:has(.st-key-cost_model_radio input[value="5"]:checked) .st-key-cost-panel {
-            transform: none;
-        }
-        /* Phones keep the sheet's bottom Calculate bar and hide the header
-           button (the header is too crowded at phone width). The desktop rail
-           layout (an absolute button filling a full-height rail) is reverted
-           to an in-flow compact bar so nothing overflows the viewport. */
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail {
-            display: block;
-            flex: 0 0 auto !important;
-            height: auto !important;
-            min-height: 0 !important;
-        }
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail
-        [data-testid="stElementContainer"] {
-            position: static;
-            inset: auto;
-        }
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button {
-            align-items: center;
-            flex-direction: row;
-            gap: 0.65rem;
-            inset: auto;
-            justify-content: center;
-            padding: 0.8rem 1rem;
-            position: static;
-            width: 100% !important;
-        }
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail
-        [data-testid="stFormSubmitButton"] button::before,
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail
-        [data-testid="stFormSubmitButton"] button::after {
-            content: "\\2192";
-            display: block;
-            flex: 0 0 auto;
-            font-family: "Segoe UI Symbol", sans-serif;
-            font-size: 1.2rem;
-            line-height: 1;
-        }
-        section[data-testid="stSidebar"] .st-key-scenario-action-rail [data-testid="stFormSubmitButton"] button p {
-            font-size: 1.1rem;
-            white-space: nowrap;
-            writing-mode: horizontal-tb;
-            transform: none;
-        }
-        .st-key-calculate-anchor,
-        .st-key-copy-link-anchor {
-            display: none;
-        }
-        .st-key-global-reset-btn {
-            display: none;
-        }
-        .st-key-calculate_panel {
-            background: var(--surface);
-            bottom: -1.2rem;
-            display: block;
-            padding-top: 0.45rem;
-            position: sticky;
-            z-index: 2;
-        }
-        .st-key-calculate_panel [data-testid="stFormSubmitButton"] button {
-            background: var(--action-bg);
-            border-color: var(--action-bg);
-            border-radius: 10px;
-            color: var(--action-text);
-            font-weight: 700;
-            min-height: 2.75rem;
-            width: 100% !important;
-        }
-        .block-container { padding: 4.25rem 0.75rem 6.5rem; }
-        h1 { font-size: 1.8rem; }
-        .page-deck { font-size: 0.92rem; }
-        [data-testid="stMetric"] { min-height: 96px; padding: 0.8rem 0.75rem; }
-        [data-testid="stMetricValue"] { font-size: 1.18rem; }
-        .contract-card { overflow-x: auto; }
-        div[data-testid="stTabs"] div[role="tablist"] { gap: 1.1rem; }
-        .scenario-bar { align-items: flex-start; flex-direction: column; gap: 0.25rem; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+st.html(f"<style>{_stylesheet((Path(__file__).parent / 'economic_dna' / 'ui.css').stat().st_mtime_ns)}</style>")
 
 # Theme: an explicit choice (URL parameter or the sidebar toggle) wins; on a
 # first visit Python starts from light and the component below redirects to
@@ -1648,7 +84,6 @@ st.markdown(
 def _apply_system_dark() -> None:
     st.session_state["theme"] = "dark"
     st.query_params["theme"] = "dark"
-    st.rerun()
 
 
 # Hidden button the theme-sync iframe clicks programmatically when the system
@@ -1749,37 +184,34 @@ _COST_CLICK_AWAY_JS = """
 """
 st.iframe(_COST_CLICK_AWAY_JS, width=1, height=1)
 
-# On phones the sidebar is a full-screen sheet, so after Calculate the fresh
-# results render hidden behind it. A new iframe (rendered only on the post-
-# submit rerun) marks the sidebar collapsed in Streamlit's localStorage and
-# reloads the page: the reload is a same-document navigation, which the
-# iframe sandbox permits (redirects elsewhere are blocked), and the reloaded
-# app re-runs from the URL params the submit just wrote, so the committed
-# results are what render. Desktop skips this: its sidebar sits beside the
-# content, so the results are already visible.
+# Close the mobile sheet through its native control, preserving the session.
 _SIDEBAR_CLOSE_JS = """
 <script>
 (() => {
   if (parent.innerWidth > 640) return;
-  const key = Object.keys(parent.localStorage).find((k) => k.startsWith("stSidebarCollapsed"))
-    || "stSidebarCollapsed-";
-  parent.localStorage.setItem(key, "true");
-  parent.location.reload();
+  const sidebar = parent.document.querySelector('[data-testid="stSidebar"][aria-expanded="true"]');
+  const close = sidebar?.querySelector('[data-testid="stSidebarCollapseButton"] button');
+  if (close) close.click();
 })();
 </script>
 """
 
-# Theme toggle, pinned to the page header next to Streamlit's toolbar menu.
+def _toggle_theme() -> None:
+    new_theme = "dark" if st.session_state["theme"] == "light" else "light"
+    st.session_state["theme"] = new_theme
+    st.query_params["theme"] = new_theme
+
+
+_main_dg._form_data = _FormData("scenario_form")
 with st.container(key="theme-toggle-anchor"):
-    if st.button(
-        "Dark" if theme == "light" else "Light",
+    st.form_submit_button(
+        label=None,
         icon=":material/dark_mode:" if theme == "light" else ":material/light_mode:",
         key="theme_toggle",
-    ):
-        new_theme = "dark" if theme == "light" else "light"
-        st.session_state["theme"] = new_theme
-        st.query_params["theme"] = new_theme
-        st.rerun()
+        help="Switch to dark mode" if theme == "light" else "Switch to light mode",
+        on_click=_toggle_theme,
+    )
+_main_dg._form_data = None
 
 # Cost-assumption models for the right-edge rail. Each key is a widget prefix
 # (matching the scenario parameter names), and the label is the tab handle.
@@ -1852,6 +284,24 @@ PRESET_WIDGET_KEYS = [
 PRESET_BUTTON_NAMES = [name for name in PRESET_SCENARIOS if name != "Paper baseline"]
 
 
+NUMBER_INPUT_FORMATS = {
+    "retrieval": "%.4g",
+    "dna_synthesis_cost": "%.10g",
+    "dna_sequencing_cost": "%.10g",
+    "amazon_put_per_1000": "%.6f",
+    "amazon_restore_per_1000": "%.6f",
+    "amazon_retrieval_per_tb": "%.6f",
+    "amazon_storage_per_tb_month": "%.6f",
+    "azure_write_per_1000": "%.6f",
+    "azure_read_per_1000": "%.6f",
+    "azure_retrieval_per_tb": "%.6f",
+    "azure_storage_per_tb_month": "%.6f",
+    "tape_media_per_tb": "%.6f",
+    "tape_hardware_per_tb": "%.6f",
+    "tape_energy_per_tb_year": "%.6f",
+}
+
+
 WIDGET_KEYS = [
     "archive_value",
     "archive_unit",
@@ -1907,7 +357,11 @@ WIDGET_KEYS = [
 
 
 def _default_projection_end(scenario: Scenario, query: dict[str, str]) -> int:
-    return min(2500, max(scenario.start_year + 25, int(query.get("projection_end", 2350))))
+    try:
+        final_year = int(query.get("projection_end", 2350))
+    except (TypeError, ValueError, OverflowError):
+        final_year = 2350
+    return min(2500, max(scenario.start_year, final_year))
 
 
 def _query_mapping() -> dict[str, str]:
@@ -1916,8 +370,10 @@ def _query_mapping() -> dict[str, str]:
 
 def _initial_scenario() -> Scenario:
     try:
-        return Scenario.from_mapping(_query_mapping())
-    except (TypeError, ValueError):
+        scenario = Scenario.from_mapping(_query_mapping())
+        _cached_simulation(scenario)
+        return scenario
+    except (TypeError, ValueError, OverflowError):
         st.warning("The shared URL contained invalid values. The paper baseline has been loaded instead.")
         return Scenario()
 
@@ -1996,7 +452,9 @@ def _widget_state_from_scenario(
 
 
 def _snapshot_widgets() -> dict[str, bool | float | int | str]:
-    return {key: st.session_state[key] for key in WIDGET_KEYS}
+    widgets = {key: st.session_state[key] for key in WIDGET_KEYS}
+    widgets["projection_end"] = max(widgets["start_year_widget"], widgets["projection_end"])
+    return widgets
 
 
 def _scenario_from_widgets(widgets: dict[str, bool | float | int | str]) -> Scenario:
@@ -2110,7 +568,7 @@ def _themed_table(columns: list[str], rows: list[list[str]]) -> None:
 
 def _chart_downloads(
     key: str,
-    csv_data: bytes,
+    csv_data: pd.DataFrame,
     filename_base: str,
     chart_key: str,
 ) -> None:
@@ -2118,13 +576,14 @@ def _chart_downloads(
     columns = st.columns(3)
     columns[0].download_button(
         "CSV",
-        csv_data,
+        lambda: csv_data.to_csv(index=False).encode("utf-8"),
         f"{filename_base}.csv",
         "text/csv",
         key=f"download_{key}_csv",
         icon=":material/download:",
         width="stretch",
         help="Download the data shown in this graph.",
+        on_click="ignore",
     )
     columns[1].button(
         "PNG",
@@ -2295,15 +754,8 @@ def _plot_config(filename: str) -> dict:
     }
 
 
-def _plotly_chart_with_placeholder(figure, *, key: str, filename: str) -> None:
-    slot = st.empty()
-    height = int(figure.layout.height or 500)
-    with slot.container():
-        st.markdown(
-            f'<div class="chart-loading" style="height: {height}px;"></div>',
-            unsafe_allow_html=True,
-        )
-    slot.plotly_chart(
+def _render_chart(figure, *, key: str, filename: str) -> None:
+    st.plotly_chart(
         figure,
         key=key,
         width="stretch",
@@ -2311,12 +763,12 @@ def _plotly_chart_with_placeholder(figure, *, key: str, filename: str) -> None:
     )
 
 
-@st.cache_data(show_spinner=False, max_entries=32)
+@st.cache_data(show_spinner=False, max_entries=8, ttl=600)
 def _cached_simulation(scenario: Scenario):
     return simulate_scenario(scenario)
 
 
-@st.cache_data(show_spinner=False, max_entries=32)
+@st.cache_data(show_spinner=False, max_entries=8, ttl=600)
 def _cached_projection(scenario: Scenario, final_year: int) -> pd.DataFrame:
     return simulate_start_years(scenario, final_year)
 
@@ -2363,10 +815,7 @@ def _reset_widget_keys(widget_keys: list[str]) -> None:
 
 
 def _apply_preset(preset_name: str) -> None:
-    # Same mechanism as _reset_widget_keys: an on_click callback runs before
-    # the next rerun re-instantiates the widgets, so writing session_state
-    # here is safe even though these are form widgets. Presets describe the
-    # workload profile only; cost-model assumptions stay exactly as edited.
+    # Presets set workload fields; the form submits other pending edits too.
     preset_widgets = _widget_state_from_scenario(PRESET_SCENARIOS[preset_name], _query_mapping())
     for widget_key in PRESET_WIDGET_KEYS:
         value = preset_widgets[widget_key]
@@ -2383,8 +832,47 @@ def _preset_button_label(preset_name: str) -> str:
     return f"{preset_name}\n{archive} | {asset} | {retrieval} | {retention}"
 
 
+def _bind_form_controls(committed: dict) -> None:
+    # Keep Python callbacks as a fallback; the browser normally applies these
+    # input-only actions to the existing form without submitting it.
+    actions = {
+        "global_reset": {"values": baseline_widgets},
+        "sidebar_reset": {"values": {key: baseline_widgets[key] for key in SIDEBAR_WIDGET_KEYS}},
+    }
+    for model, keys in MODEL_WIDGET_KEYS.items():
+        actions[f"reset_{model}"] = {"values": {key: baseline_widgets[key] for key in keys}}
+    for index, name in enumerate(PRESET_SCENARIOS):
+        if name in PRESET_BUTTON_NAMES:
+            values = _widget_state_from_scenario(PRESET_SCENARIOS[name])
+            actions[f"preset_{index}"] = {"values": {key: values[key] for key in PRESET_WIDGET_KEYS}}
+    for key in ("dna_synthesis_cost", "dna_sequencing_cost"):
+        for suffix, factor in (("div10", 0.1), ("mul10", 10)):
+            actions[f"{key}_{suffix}"] = {"scale": key, "factor": factor}
+    displayed = {}
+    for key, value in committed.items():
+        if isinstance(value, float):
+            precision = NUMBER_INPUT_FORMATS.get(key, "%.2f")
+            displayed[key] = float(precision % value)
+        else:
+            displayed[key] = value
+    config = json.dumps({"committed": committed, "displayed": displayed, "actions": actions})
+    script_path = Path(__file__).parent / "economic_dna" / "form_controls.js"
+    script = _form_script(script_path.stat().st_mtime_ns)
+    # Escape user-entered names before embedding JSON, so they remain data,
+    # never executable HTML. Native st.html keeps handlers in the page realm.
+    config = config.replace("<", r"\u003c")
+    st.html(
+        f'<span class="form-controls-marker" hidden></span>'
+        f"<script>(() => {{ const config = {config};\n{script}\n }})();</script>",
+        unsafe_allow_javascript=True,
+    )
+
+
 for widget_key, default_value in initial_widgets.items():
     st.session_state.setdefault(widget_key, default_value)
+st.session_state["projection_end"] = max(
+    st.session_state["start_year_widget"], st.session_state["projection_end"]
+)
 # The graphs only follow the last calculated inputs: the initial load
 # counts as the first calculation. Every widget lives inside one form, so
 # edits never trigger reruns — the three Calculate buttons are form submits
@@ -2396,42 +884,42 @@ st.session_state.setdefault("committed_widgets", dict(initial_widgets))
 # the buttons or the charts. The form block lives in the sidebar; the panel
 # and header Calculate join it via the main dg's form data below.
 with st.sidebar:
-    with st.container(key="sidebar-presets"):
-        st.markdown('<div class="sidebar-section">Load Workload Presets</div>', unsafe_allow_html=True)
-        for index, preset_name in enumerate(PRESET_SCENARIOS):
-            if preset_name not in PRESET_BUTTON_NAMES:
-                continue
-            st.button(
-                _preset_button_label(preset_name),
-                key=f"preset_{index}",
-                on_click=_apply_preset,
-                args=(preset_name,),
-                width="stretch",
-            )
-    with st.container(key="sidebar-reset-btn"):
-        st.button(
-            "Reset sidebar values to paper baseline",
-            key="sidebar_reset",
-            on_click=_reset_widget_keys,
-            args=(SIDEBAR_WIDGET_KEYS,),
-            width="stretch",
-        )
-    with st.container(key="sidebar-advanced-toggle"):
-        st.checkbox(
-            "Show advanced cost assumptions",
-            key="show_advanced",
-            help="Reveals price base years, durability, and replacement cycles in the cost "
-            "assumption panels on the right edge. Unit costs and decline rates -- the inputs "
-            "that drive the projections -- are always visible.",
-        )
     with st.form("scenario_form", border=False, enter_to_submit=False):
+        with st.expander("Example scenarios", expanded=False):
+            with st.container(key="sidebar-presets"):
+                for index, preset_name in enumerate(PRESET_SCENARIOS):
+                    if preset_name not in PRESET_BUTTON_NAMES:
+                        continue
+                    st.form_submit_button(
+                        _preset_button_label(preset_name),
+                        key=f"preset_{index}",
+                        on_click=_apply_preset,
+                        args=(preset_name,),
+                        width="stretch",
+                    )
+        with st.container(key="sidebar-reset-btn"):
+            st.form_submit_button(
+                "Reset workload",
+                key="sidebar_reset",
+                on_click=_reset_widget_keys,
+                args=(SIDEBAR_WIDGET_KEYS,),
+                width="stretch",
+                icon=":material/restart_alt:",
+            )
+        with st.container(key="sidebar-advanced-toggle"):
+            st.checkbox(
+                "Show advanced cost assumptions",
+                key="show_advanced",
+                help="Reveals price base years, durability, and replacement cycles in the cost "
+                "assumption panels on the right edge. Unit costs and decline rates -- the inputs "
+                "that drive the projections -- are always visible.",
+            )
         input_column, action_column = st.columns([6, 1], gap="small")
         with input_column:
             st.markdown(
                 """
                 <div class="sidebar-kicker">Scenario builder</div>
                 <div class="sidebar-title">Model inputs</div>
-                <p class="sidebar-copy">Archive workload, time horizon, and technology selection. Cost assumptions live in the tabs on the right edge of the page.</p>
                 """,
                 unsafe_allow_html=True,
             )
@@ -2445,8 +933,8 @@ with st.sidebar:
                     help="Total logical data stored in the collection, before DNA coding, redundancy, or provider replication.",
                 )
             with col_b:
-                archive_unit_input = st.selectbox(
-                    "Unit", ["TB", "PB", "EB"], key="archive_unit",
+                archive_unit_input = st.radio(
+                    "Unit", ["TB", "PB", "EB"], key="archive_unit", horizontal=True,
                     help="Decimal capacity unit: 1 PB = 1,000 TB and 1 EB = 1,000,000 TB.",
                 )
     
@@ -2459,8 +947,8 @@ with st.sidebar:
                     help="Average data object size. It determines object count.",
                 )
             with col_b:
-                asset_unit_input = st.selectbox(
-                    "Unit ", ["MB", "GB"], key="asset_unit",
+                asset_unit_input = st.radio(
+                    "Unit ", ["MB", "GB"], key="asset_unit", horizontal=True,
                     help="Unit used for the average size of one asset.",
                 )
     
@@ -2481,7 +969,7 @@ with st.sidebar:
             with finance_col_a:
                 retrieval = st.number_input(
                     "Annual retrieval (%)", min_value=0.0, max_value=10_000.0,
-                    step=0.25, key="retrieval",
+                    step=0.25, key="retrieval", format=NUMBER_INPUT_FORMATS["retrieval"],
                     help="Expected share of the logical archive retrieved each year. 1% means reading 10 TB per year from a 1 PB archive.",
                 )
             with finance_col_b:
@@ -2500,7 +988,7 @@ with st.sidebar:
             chart_col_a, chart_col_b = st.columns([1.4, 1])
             with chart_col_a:
                 projection_end = st.number_input(
-                    "Outlook end year", min_value=int(start_year), max_value=2500,
+                    "Outlook end year", min_value=2025, max_value=2500,
                     key="projection_end",
                     help="Final archive start year included in the start-year outlook chart.",
                 )
@@ -2514,7 +1002,7 @@ with st.sidebar:
                 )
     
             st.markdown('<div class="sidebar-section">Technologies</div>', unsafe_allow_html=True)
-            with st.container(border=True):
+            with st.container():
                 tech_col_a, tech_col_b = st.columns(2)
                 with tech_col_a:
                     tech_dna = st.checkbox(
@@ -2534,11 +1022,6 @@ with st.sidebar:
                         "Custom", key="tech_custom", help="User-defined storage cost model.",
                     )
     
-            st.markdown('<div class="sidebar-section">Cost assumptions</div>', unsafe_allow_html=True)
-            st.markdown(
-                '<p class="sidebar-copy">Editable unit costs and decline rates for each storage model live in the tabs on the right edge of the page.</p>',
-                unsafe_allow_html=True,
-            )
         with action_column:
             with st.container(key="scenario-action-rail"):
                 # The mobile bottom bar; hidden on desktop, where the wide
@@ -2563,10 +1046,13 @@ with st.sidebar:
 # Wide centered Calculate button in the top header: it stays visible while
 # the sidebar or a cost panel is open, so it works after either kind of edit.
 # (Hidden on phones, where the sheet bar and the panel bar cover the flows.)
+_main_dg._form_data = _FormData("scenario_form")
 with st.container(key="global-reset-btn"):
-    st.button(
-        "Reset all",
+    st.form_submit_button(
+        label=None,
         key="global_reset",
+        icon=":material/restart_alt:",
+        help="Reset all inputs to the paper baseline",
         on_click=_reset_widget_keys,
         args=(WIDGET_KEYS,),
     )
@@ -2619,6 +1105,7 @@ def _render_order_of_magnitude_steppers(widget_key: str) -> None:
 with st.container(key="calculate-anchor"):
     calculate_header = st.form_submit_button(
         "Calculate",
+        icon=":material/calculate:",
         key="calculate_header",
         type="primary",
         width="stretch",
@@ -2627,9 +1114,10 @@ with st.container(key="calculate-anchor"):
 _main_dg._form_data = None
 with st.container(key="copy-link-anchor"):
     st.button(
-        "Copy link",
+        label=None,
         key="copy_scenario_link",
         icon=":material/link:",
+        help="Copy a link to the calculated scenario",
     )
 _bind_copy_link_button("copy_scenario_link")
 _main_dg._form_data = _FormData("scenario_form")
@@ -2660,7 +1148,6 @@ with st.container(key="cost-panel"):
         '<div class="cost-panel-title cost-title-azure">Azure Blob Archive assumptions</div>'
         '<div class="cost-panel-title cost-title-tape">Tape on-premise assumptions</div>'
         '<div class="cost-panel-title cost-title-custom">Custom storage assumptions</div>'
-        '<p class="cost-panel-deck">Editable unit costs, decline rates, and replacement cycles for each storage model. Changes apply when you press Calculate.</p>'
         '<div class="cost-panel-summary cost-summary-dna"><span>Synthesis</span><span>Sequencing</span><span>Durability</span></div>'
         '<div class="cost-panel-summary cost-summary-amazon"><span>Requests</span><span>Retrieval</span><span>Storage</span></div>'
         '<div class="cost-panel-summary cost-summary-azure"><span>Operations</span><span>Retrieval</span><span>Archive tier</span></div>'
@@ -2680,14 +1167,14 @@ with st.container(key="cost-panel"):
             )
         dna_synthesis_cost = st.number_input(
             "Synthesis cost (USD/MB)", min_value=0.0,
-            format="%.10g", key="dna_synthesis_cost",
+            format=NUMBER_INPUT_FORMATS["dna_synthesis_cost"], key="dna_synthesis_cost",
             help="Cost in the DNA cost base year to synthesize enough bases for 1 MB of logical data, before redundancy and indexing overhead. "
             "Shown in significant-figure notation (e.g. 1e-07) so very small values stay visible instead of displaying as 0.",
         )
         _render_order_of_magnitude_steppers("dna_synthesis_cost")
         dna_sequencing_cost = st.number_input(
             "Sequencing cost (USD/MB)", min_value=0.0,
-            format="%.10g", key="dna_sequencing_cost",
+            format=NUMBER_INPUT_FORMATS["dna_sequencing_cost"], key="dna_sequencing_cost",
             help="Cost in the DNA cost base year to sequence 1 MB of retrieved logical data. "
             "Shown in significant-figure notation (e.g. 1e-07) so very small values stay visible instead of displaying as 0.",
         )
@@ -2726,25 +1213,25 @@ with st.container(key="cost-panel"):
         st.caption("Base-year prices")
         amazon_put_per_1000 = st.number_input(
             "Write requests (USD/1,000)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["amazon_put_per_1000"],
             key="amazon_put_per_1000",
             help="Charge for 1,000 requests when the archive is initially written.",
         )
         amazon_restore_per_1000 = st.number_input(
             "Bulk restore requests (USD/1,000)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["amazon_restore_per_1000"],
             key="amazon_restore_per_1000",
             help="Charge for 1,000 bulk restore-job requests. Asset size determines the request count.",
         )
         amazon_retrieval_per_tb = st.number_input(
             "Bulk data retrieval (USD/TB)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["amazon_retrieval_per_tb"],
             key="amazon_retrieval_per_tb",
             help="Capacity charge for retrieving one TB of archived data.",
         )
         amazon_storage_per_tb_month = st.number_input(
             "Storage (USD/TB/month)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["amazon_storage_per_tb_month"],
             key="amazon_storage_per_tb_month",
             help="Recurring monthly charge to retain one TB in Deep Archive.",
         )
@@ -2766,25 +1253,25 @@ with st.container(key="cost-panel"):
         st.caption("Base-year prices")
         azure_write_per_1000 = st.number_input(
             "Write requests (USD/1,000)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["azure_write_per_1000"],
             key="azure_write_per_1000",
             help="Charge for 1,000 requests when the archive is initially written.",
         )
         azure_read_per_1000 = st.number_input(
             "Read requests (USD/1,000)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["azure_read_per_1000"],
             key="azure_read_per_1000",
             help="Charge for 1,000 retrieval requests. Asset size determines the request count.",
         )
         azure_retrieval_per_tb = st.number_input(
             "Data retrieval (USD/TB)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["azure_retrieval_per_tb"],
             key="azure_retrieval_per_tb",
             help="Capacity charge for retrieving one TB from the Archive tier.",
         )
         azure_storage_per_tb_month = st.number_input(
             "Storage (USD/TB/month)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["azure_storage_per_tb_month"],
             key="azure_storage_per_tb_month",
             help="Recurring monthly charge to retain one TB in the Archive tier.",
         )
@@ -2810,7 +1297,7 @@ with st.container(key="cost-panel"):
         )
         tape_media_per_tb = st.number_input(
             "Tape cartridges (USD/TB per write)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["tape_media_per_tb"],
             key="tape_media_per_tb",
             help=(
                 "Physical tape cartridge/media cost for one TB. The model charges it on the initial "
@@ -2820,7 +1307,7 @@ with st.container(key="cost-panel"):
         )
         tape_hardware_per_tb = st.number_input(
             "Tape library/drives (USD/TB amortized)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["tape_hardware_per_tb"],
             key="tape_hardware_per_tb",
             help=(
                 "Tape library, drive, robotics, and supporting hardware cost allocated per TB. The "
@@ -2829,7 +1316,7 @@ with st.container(key="cost-panel"):
         )
         tape_energy_per_tb_year = st.number_input(
             "Energy (USD/TB/year)", min_value=0.0,
-            format="%.6f",
+            format=NUMBER_INPUT_FORMATS["tape_energy_per_tb_year"],
             key="tape_energy_per_tb_year",
             help="Annual energy cost to retain one TB in the tape system.",
         )
@@ -2915,27 +1402,26 @@ if submitted:
     try:
         submitted_widgets = _snapshot_widgets()
         candidate = _scenario_from_widgets(submitted_widgets)
+        _cached_simulation(candidate)
     except (KeyError, ValueError) as error:
-        st.error(str(error))
-        st.stop()
-    st.session_state["committed_widgets"] = submitted_widgets
-    params = candidate.to_query_params()
-    params.update(
-        {
-            "projection_end": str(int(submitted_widgets["projection_end"])),
-            "log_scale": str(bool(submitted_widgets["log_scale"])),
-            "theme": theme,
-        }
-    )
-    st.query_params.from_dict(params)
-    # Phones: the next rerun pops this flag and renders the iframe that
-    # closes the sidebar sheet so the committed results are visible.
-    st.session_state["close_sidebar_on_mobile"] = True
-    st.rerun()
+        st.error(f"{error} Your last calculated results are shown below.")
+    else:
+        st.session_state["committed_widgets"] = submitted_widgets
+        params = candidate.to_query_params()
+        params.update(
+            {
+                "projection_end": str(int(submitted_widgets["projection_end"])),
+                "log_scale": str(bool(submitted_widgets["log_scale"])),
+                "theme": theme,
+            }
+        )
+        st.query_params.from_dict(params)
+        st.session_state["close_sidebar_on_mobile"] = True
 
 committed_widgets = st.session_state["committed_widgets"]
+_bind_form_controls(committed_widgets)
 
-# Rendered only on the rerun after Calculate (see _SIDEBAR_CLOSE_JS).
+# Close the mobile input sheet after a successful calculation.
 if st.session_state.pop("close_sidebar_on_mobile", False):
     st.iframe(_SIDEBAR_CLOSE_JS, width=1, height=1)
 
@@ -2954,12 +1440,10 @@ projection_end = int(committed_widgets["projection_end"])
 log_scale = bool(committed_widgets["log_scale"])
 
 result = _cached_simulation(scenario)
-projection = _cached_projection(scenario, int(projection_end))
 dna_curve_end = max(
     scenario.dna_cost_base_year,
     min(2500, scenario.start_year + scenario.horizon_years - 1),
 )
-dna_costs = _cached_dna_costs(scenario, dna_curve_end)
 use_present_value = scenario.discount_rate_percent > 0
 value_column = "present_value_usd" if use_present_value else "total_cost_usd"
 chart_palette = palette_for(theme)
@@ -3000,6 +1484,7 @@ st.markdown(
         <span><strong>{len(scenario.technologies)}</strong> technologies</span>
         <span>{cost_basis}</span>
         <span>{scale_label}</span>
+        <span class="pending-notice" role="status" aria-live="polite"></span>
     </div>
     """,
     unsafe_allow_html=True,
@@ -3024,391 +1509,407 @@ else:
     if lowest_cost > 0:
         ratio = dna_total / lowest_cost
         metric_columns[3].metric(
-            "DNA lifecycle cost", _money(dna_total), f"{ratio:,.2g}x lowest", delta_color="off"
+            "DNA lifecycle cost", _money(dna_total), f"{format_display_number(ratio)}x lowest", delta_color="off"
         )
     else:
         metric_columns[3].metric("DNA lifecycle cost", _money(dna_total))
 
 st.markdown('<div class="workspace-kicker">Analysis workspace</div>', unsafe_allow_html=True)
-overview_tab, outlook_tab, dna_cost_tab, sensitivity_tab, assumptions_tab, about_tab = st.tabs(
-    ["Lifecycle", "Start-year outlook", "DNA unit costs", "Sensitivity", "Assumptions", "About"]
-)
+def _remember_chart_option(key: str) -> None:
+    st.session_state[f"saved_{key}"] = st.session_state[key]
 
-with overview_tab:
-    _section_intro(
-        "Lifecycle comparison",
-        "Cumulative lifecycle cost for one archive opened in the selected start year. "
-        "Each line includes initial and replacement writes, storage or operation, and expected retrieval.",
-    )
-    show_uncertainty = (
-        "DNA" in scenario.technologies
-        and st.checkbox(
-            "Show DNA uncertainty band",
-            key="show_uncertainty_band",
-            help="Shades the P10-P90 range from sampling the synthesis and sequencing "
-            "decline rates +/-30% around your chosen values, everything else held fixed.",
-        )
-    )
-    dna_uncertainty = (
-        _cached_uncertainty_band(scenario, use_present_value) if show_uncertainty else None
-    )
-    lifecycle_crossovers = find_lifecycle_crossovers(result, use_present_value)
-    lifecycle_figure = lifecycle_chart(
-        result,
-        use_present_value,
-        log_scale,
-        theme=theme,
-        dna_uncertainty=dna_uncertainty,
-        crossovers=lifecycle_crossovers,
-    )
-    _plotly_chart_with_placeholder(
-        lifecycle_figure,
-        key="chart_lifecycle",
-        filename="dna-storage-lifecycle",
-    )
-    _chart_downloads(
-        "lifecycle",
-        result.yearly.to_csv(index=False).encode("utf-8"),
-        "dna-storage-lifecycle",
-        "chart_lifecycle",
-    )
-    st.markdown(
-        """
-        <div class="chart-divider">
-            <h3>Cost composition</h3>
-            <p>Undiscounted write and replacement, retrieval, and recurring storage or operating costs.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    breakdown_figure = breakdown_chart(result, log_scale, theme=theme)
-    _plotly_chart_with_placeholder(
-        breakdown_figure,
-        key="chart_breakdown",
-        filename="dna-storage-cost-components",
-    )
-    breakdown_columns = ["technology", *[component for component in (
-        "write_cost_usd", "read_cost_usd", "maintenance_cost_usd", "total_cost_usd"
-    )]]
-    _chart_downloads(
-        "breakdown",
-        result.totals[breakdown_columns].to_csv(index=False).encode("utf-8"),
-        "dna-storage-cost-components",
-        "chart_breakdown",
+
+@st.fragment
+def _render_analysis() -> None:
+    overview_tab, outlook_tab, dna_cost_tab, sensitivity_tab, assumptions_tab, about_tab = st.tabs(
+        ["Lifecycle", "Start-year outlook", "DNA unit costs", "Sensitivity", "Assumptions", "About"],
+        key="analysis_tabs", on_change="rerun",
     )
 
-with outlook_tab:
-    _section_intro(
-        "Start-year sensitivity",
-        "The same archive workload and retention horizon are recalculated for every possible storage "
-        "start year. A crossover is the first start year for which DNA's lifecycle cost is no greater "
-        "than the comparison technology.",
-    )
-    projection_figure = projection_chart(projection, use_present_value, log_scale, theme=theme)
-    _plotly_chart_with_placeholder(
-        projection_figure,
-        key="chart_projection",
-        filename="dna-storage-start-year-outlook",
-    )
-    _chart_downloads(
-        "projection",
-        projection.to_csv(index=False).encode("utf-8"),
-        "dna-storage-start-year-outlook",
-        "chart_projection",
-    )
-    st.markdown(
-        """
-        <div class="chart-divider">
-            <h3>Crossover years</h3>
-            <p>First modeled start year in which DNA reaches or undercuts each comparison technology.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    crossovers = find_crossover_years(projection)
-    if crossovers:
-        crossover_rows = [
-            {
-                "Comparison": f"DNA <= {technology}",
-                "First start year": str(year) if year is not None else f"Not by {projection_end}",
-            }
-            for technology, year in crossovers.items()
-        ]
-        _themed_table(
-            ["Comparison", "First start year"],
-            [[row["Comparison"], row["First start year"]] for row in crossover_rows],
-        )
-    else:
-        st.info("Include DNA and at least one comparison technology to calculate crossover years.")
-
-with dna_cost_tab:
-    _section_intro(
-        "DNA unit economics",
-        f"Both curves begin with the editable {scenario.dna_cost_base_year} unit costs and apply the "
-        f"selected annual decline rates through {dna_curve_end}. They are unit-cost assumptions, "
-        "not lifecycle totals.",
-    )
-    show_history = st.checkbox(
-        "Show historical context",
-        value=True,
-        key="show_dna_history",
-        help="Synthesis: the paper's fitted historical trend back to 2000. Sequencing: "
-        "NHGRI's measured cost per Mb, 2001-2022.",
-    )
-    synthesis_history = (
-        _cached_synthesis_history(scenario.dna_cost_base_year) if show_history else None
-    )
-    observed_sequencing = _cached_observed_sequencing_costs() if show_history else None
-
-    chart_columns = st.columns(2)
-    with chart_columns[0]:
-        synthesis_title = "DNA synthesis cost trajectory"
-        synthesis_figure = dna_unit_cost_chart(
-            dna_costs,
-            "synthesis_cost_usd_per_mb",
-            synthesis_title,
-            chart_palette["unit_cost_colors"]["synthesis"],
-            log_scale,
-            theme=theme,
-            history=synthesis_history,
-        )
-        _plotly_chart_with_placeholder(
-            synthesis_figure,
-            key="chart_dna_synthesis",
-            filename="dna-synthesis-cost-trajectory",
-        )
-        st.caption(
-            "Modeled cost to synthesize enough DNA bases for 1 MB of logical data. "
-            "Redundancy, indexing, and coding overhead are not added here. The dotted "
-            "trend is the paper's historical fit, not a raw dataset: no public per-MB "
-            "synthesis price series exists the way NHGRI's sequencing table does."
-        )
-        synthesis_data = dna_costs[["year", "synthesis_cost_usd_per_mb"]]
-        _chart_downloads(
-            "dna_synthesis",
-            synthesis_data.to_csv(index=False).encode("utf-8"),
-            "dna-synthesis-cost-trajectory",
-            "chart_dna_synthesis",
-        )
-    with chart_columns[1]:
-        sequencing_title = "DNA sequencing cost trajectory"
-        sequencing_figure = dna_unit_cost_chart(
-            dna_costs,
-            "sequencing_cost_usd_per_mb",
-            sequencing_title,
-            chart_palette["unit_cost_colors"]["sequencing"],
-            log_scale,
-            theme=theme,
-            observed=observed_sequencing,
-        )
-        _plotly_chart_with_placeholder(
-            sequencing_figure,
-            key="chart_dna_sequencing",
-            filename="dna-sequencing-cost-trajectory",
-        )
-        st.caption(
-            "Modeled cost to sequence and retrieve 1 MB of logical data. "
-            "It is applied to the share of the archive retrieved each year. Observed "
-            "markers are NHGRI's reported nominal-USD cost per Mb at each date, not "
-            "adjusted to this model's constant-USD convention."
-        )
-        sequencing_data = dna_costs[["year", "sequencing_cost_usd_per_mb"]]
-        _chart_downloads(
-            "dna_sequencing",
-            sequencing_data.to_csv(index=False).encode("utf-8"),
-            "dna-sequencing-cost-trajectory",
-            "chart_dna_sequencing",
-        )
-
-with sensitivity_tab:
-    _section_intro(
-        "Synthesis price needed to break even",
-        "For each alternative technology, the DNA synthesis price at which DNA's lifecycle cost "
-        "would exactly equal that alternative's, with every other input held at your current "
-        "scenario. The dashed “Current” line marks today's synthesis price: a bar reaching left "
-        "of it means synthesis still has to get cheaper to catch up; a bar reaching right of it "
-        "means DNA already wins at today's price.",
-    )
-    if "DNA" not in scenario.technologies:
-        st.info("Select DNA to see its break-even price and cost sensitivity.")
-    else:
-        breakeven_frame = _cached_breakeven(scenario, use_present_value)
-        if breakeven_frame.empty:
-            st.info("Select at least one comparison technology to calculate a break-even price.")
-        else:
-            breakeven_figure = breakeven_chart(
-                breakeven_frame, scenario.dna_synthesis_cost_per_mb, theme=theme
+    if overview_tab.open:
+        with overview_tab:
+            _section_intro(
+                "Lifecycle comparison",
+                "Cumulative lifecycle cost for one archive opened in the selected start year. "
+                "Each line includes initial and replacement writes, storage or operation, and expected retrieval.",
             )
-            _plotly_chart_with_placeholder(
-                breakeven_figure,
-                key="chart_breakeven",
-                filename="dna-synthesis-breakeven",
+            show_uncertainty = (
+                "DNA" in scenario.technologies
+                and st.checkbox(
+                    "Show DNA uncertainty band",
+                    key="show_uncertainty_band",
+                    value=st.session_state.get("saved_show_uncertainty_band", False),
+                    on_change=_remember_chart_option,
+                    args=("show_uncertainty_band",),
+                    help="Shades the P10-P90 range from sampling the synthesis and sequencing "
+                    "decline rates +/-30% around your chosen values, everything else held fixed.",
+                )
             )
-            st.caption(
-                "Only DNA's write/replacement cost depends on the synthesis price, so its lifecycle "
-                "cost is exactly linear in that one input — each break-even price is solved directly "
-                "from the two totals, not searched for. “Not reachable” (✕) means DNA's sequencing "
-                "and retrieval costs alone already exceed that technology's lifecycle cost, so no "
-                "synthesis price, not even $0/MB, would close the gap. Hover a bar or marker for the "
-                "exact numbers."
+            dna_uncertainty = (
+                _cached_uncertainty_band(scenario, use_present_value) if show_uncertainty else None
             )
-            def _breakeven_cell(breakeven: float) -> str:
-                if pd.isna(breakeven):
-                    return "Not reachable"
-                return f"${format_display_number(breakeven)}/MB"
-
-            def _direction_cell(breakeven: float, reduction_factor: float) -> str:
-                if pd.isna(breakeven):
-                    return "—"
-                if pd.isna(reduction_factor):
-                    return "Needs free synthesis"
-                if breakeven < scenario.dna_synthesis_cost_per_mb:
-                    return f"{format_display_number(reduction_factor)}x lower needed"
-                if breakeven > scenario.dna_synthesis_cost_per_mb:
-                    headroom = breakeven / scenario.dna_synthesis_cost_per_mb
-                    return f"Already cheaper ({format_display_number(headroom)}x headroom)"
-                return "At parity today"
-
-            breakeven_rows = [
-                [
-                    row["technology"],
-                    _breakeven_cell(row["breakeven_synthesis_cost_usd_per_mb"]),
-                    _direction_cell(row["breakeven_synthesis_cost_usd_per_mb"], row["reduction_factor"]),
-                ]
-                for _, row in breakeven_frame.iterrows()
-            ]
-            _themed_table(
-                ["Comparison", "Break-even synthesis cost", "Today vs. break-even"],
-                breakeven_rows,
+            lifecycle_crossovers = find_lifecycle_crossovers(result, use_present_value)
+            lifecycle_figure = lifecycle_chart(
+                result,
+                use_present_value,
+                log_scale,
+                theme=theme,
+                dna_uncertainty=dna_uncertainty,
+                crossovers=lifecycle_crossovers,
+            )
+            _render_chart(
+                lifecycle_figure,
+                key="chart_lifecycle",
+                filename="dna-storage-lifecycle",
             )
             _chart_downloads(
-                "breakeven",
-                breakeven_frame.to_csv(index=False).encode("utf-8"),
-                "dna-synthesis-breakeven",
-                "chart_breakeven",
+                "lifecycle",
+                result.yearly,
+                "dna-storage-lifecycle",
+                "chart_lifecycle",
+            )
+            st.markdown(
+                """
+                <div class="chart-divider">
+                    <h3>Cost composition</h3>
+                    <p>Undiscounted write and replacement, retrieval, and recurring storage or operating costs.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            breakdown_figure = breakdown_chart(result, log_scale, theme=theme)
+            _render_chart(
+                breakdown_figure,
+                key="chart_breakdown",
+                filename="dna-storage-cost-components",
+            )
+            breakdown_columns = ["technology", *[component for component in (
+                "write_cost_usd", "read_cost_usd", "maintenance_cost_usd", "total_cost_usd"
+            )]]
+            _chart_downloads(
+                "breakdown",
+                result.totals[breakdown_columns],
+                "dna-storage-cost-components",
+                "chart_breakdown",
             )
 
-        st.markdown(
-            """
-            <div class="chart-divider">
-                <h3>What drives DNA's own cost</h3>
-                <p>Each bar re-runs the model with one input moved 50% below and 50% above your
-                current value (a fixed step instead, for an input currently at 0), holding every
-                other input fixed, and plots the resulting spread in DNA's lifecycle cost. Bars
-                are ranked with the biggest driver at the top and the smallest at the bottom.</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-        sensitivity_frame = _cached_sensitivity(scenario, use_present_value)
-        sensitivity_figure = sensitivity_chart(sensitivity_frame, use_present_value, theme=theme)
-        _plotly_chart_with_placeholder(
-            sensitivity_figure,
-            key="chart_sensitivity",
-            filename="dna-cost-sensitivity",
-        )
-        st.caption(
-            "The dotted line marks DNA's cost at your actual inputs. A bar with no visible width "
-            "means that input has no effect on DNA's cost in this scenario — average asset size, "
-            "for example, never enters DNA's own cost formula. Hover a bar for the exact low/high "
-            "values and resulting costs."
-        )
-        _chart_downloads(
-            "sensitivity",
-            sensitivity_frame.to_csv(index=False).encode("utf-8"),
-            "dna-cost-sensitivity",
-            "chart_sensitivity",
-        )
+    if outlook_tab.open:
+        with outlook_tab:
+            projection = _cached_projection(scenario, projection_end)
+            _section_intro(
+                "Start-year sensitivity",
+                "The same archive workload and retention horizon are recalculated for every possible storage "
+                "start year. A crossover is the first start year for which DNA's lifecycle cost is no greater "
+                "than the comparison technology.",
+            )
+            projection_figure = projection_chart(projection, use_present_value, log_scale, theme=theme)
+            _render_chart(
+                projection_figure,
+                key="chart_projection",
+                filename="dna-storage-start-year-outlook",
+            )
+            _chart_downloads(
+                "projection",
+                projection,
+                "dna-storage-start-year-outlook",
+                "chart_projection",
+            )
+            st.markdown(
+                """
+                <div class="chart-divider">
+                    <h3>Crossover years</h3>
+                    <p>First modeled start year in which DNA reaches or undercuts each comparison technology.</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            crossovers = find_crossover_years(projection)
+            if crossovers:
+                crossover_rows = [
+                    {
+                        "Comparison": f"DNA <= {technology}",
+                        "First start year": str(year) if year is not None else f"Not by {projection_end}",
+                    }
+                    for technology, year in crossovers.items()
+                ]
+                _themed_table(
+                    ["Comparison", "First start year"],
+                    [[row["Comparison"], row["First start year"]] for row in crossover_rows],
+                )
+            else:
+                st.info("Include DNA and at least one comparison technology to calculate crossover years.")
 
-with assumptions_tab:
-    assumptions = load_assumptions()
-    _section_intro(
-        "Assumptions and scope",
-        "A concise record of the active scenario, included cost categories, and source references.",
-    )
-    contract = pd.DataFrame(
-        [
-            ("Archive period", f"{scenario.start_year}-{scenario.start_year + scenario.horizon_years - 1}"),
-            ("Annual retrieval", f"{scenario.annual_assets_retrieved:,.2f} assets ({scenario.annual_retrieval_percent:,.2f}%)"),
-            ("Discounting", f"{scenario.discount_rate_percent:,.2f}% real; present value at storage start"),
-            ("Currency", result.metadata["currency"]),
-            (
-                "DNA synthesis baseline",
-                f"${scenario.dna_synthesis_cost_per_mb:,.6g}/MB in {scenario.dna_cost_base_year}",
-            ),
-            (
-                "DNA sequencing baseline",
-                f"${scenario.dna_sequencing_cost_per_mb:,.6g}/MB in {scenario.dna_cost_base_year}",
-            ),
-            (
-                "Amazon baseline",
-                f"${scenario.amazon_storage_usd_per_mb_month * 1_000_000:,.6g}/TB/month storage; "
-                f"${scenario.amazon_bulk_retrieval_usd_per_mb * 1_000_000:,.6g}/TB retrieval "
-                f"in {scenario.amazon_price_base_year}",
-            ),
-            (
-                "Azure baseline",
-                f"${scenario.azure_storage_usd_per_mb_month * 1_000_000:,.6g}/TB/month storage; "
-                f"${scenario.azure_retrieval_usd_per_mb * 1_000_000:,.6g}/TB retrieval "
-                f"in {scenario.azure_price_base_year}",
-            ),
-            (
-                "Tape baseline",
-                f"${scenario.tape_media_usd_per_tb:,.6g}/TB media; "
-                f"${scenario.tape_hardware_usd_per_tb:,.6g}/TB hardware; "
-                f"${scenario.tape_energy_usd_per_tb_year:,.6g}/TB/year energy "
-                f"in {scenario.tape_price_base_year}",
-            ),
-            ("Horizon convention", result.metadata["horizon_convention"]),
-        ],
-        columns=["Item", "Value"],
-    )
-    contract_column, context_column = st.columns([1.45, 1], gap="large")
-    with contract_column:
-        st.subheader("Scenario contract")
-        _themed_table(
-            list(contract.columns),
-            [list(row) for row in contract.itertuples(index=False)],
-        )
-    with context_column:
-        st.subheader("Cost scope")
-        st.write(
-            "Included: DNA synthesis and sequencing, cloud write/retrieval/storage charges, "
-            "tape media/hardware/energy assumptions, and the selected custom capacity/request charges. "
-            "Excluded: labor, cloud egress, taxes, retrieval latency, minimum-storage penalties, "
-            "facilities, and unmodeled migrations."
-        )
-        st.subheader("Sources")
-        for source in assumptions["sources"].values():
-            st.markdown(f"- [{source['label']}]({source['url']})")
+    if dna_cost_tab.open:
+        with dna_cost_tab:
+            dna_costs = _cached_dna_costs(scenario, dna_curve_end)
+            _section_intro(
+                "DNA unit economics",
+                f"Both curves begin with the editable {scenario.dna_cost_base_year} unit costs and apply the "
+                f"selected annual decline rates through {dna_curve_end}. They are unit-cost assumptions, "
+                "not lifecycle totals.",
+            )
+            show_history = st.checkbox(
+                "Show historical context",
+                value=st.session_state.get("saved_show_dna_history", True),
+                key="show_dna_history",
+                on_change=_remember_chart_option,
+                args=("show_dna_history",),
+                help="Synthesis: the paper's fitted historical trend back to 2000. Sequencing: "
+                "NHGRI's measured cost per Mb, 2001-2022.",
+            )
+            synthesis_history = (
+                _cached_synthesis_history(scenario.dna_cost_base_year) if show_history else None
+            )
+            observed_sequencing = _cached_observed_sequencing_costs() if show_history else None
 
-with about_tab:
-    _section_intro(
-        "About this explorer",
-        "An interactive implementation of a DNA storage cost model for comparing long-run archival "
-        "economics across DNA, cloud archive, tape, and user-defined storage systems.",
-    )
-    about_column, paper_column = st.columns([1.25, 1], gap="large")
-    with about_column:
-        st.subheader("Purpose")
-        st.write(
-            "The explorer turns the model assumptions into adjustable controls, then recalculates "
-            "lifecycle cost, start-year sensitivity, and DNA unit-cost trajectories for the selected "
-            "archive workload."
-        )
-        st.subheader("Model boundary")
-        st.write(
-            "The results are scenario estimates, not procurement quotes. They use the visible inputs "
-            "and listed assumptions, and exclude operational details such as labor, taxes, cloud egress, "
-            "retrieval latency, and migration execution risk."
-        )
-    with paper_column:
-        st.subheader("Reference paper")
-        st.markdown(
-            "[DNA Storage Cost Model](https://doi.org/10.48550/arXiv.2608.26342)"
-        )
-        st.write(
-            "Use the linked paper as the source reference for the model framing and baseline assumptions."
-        )
-        st.subheader("Contact")
-        st.markdown("[alex@el-shaikh.com](mailto:alex@el-shaikh.com)")
+            chart_columns = st.columns(2)
+            with chart_columns[0]:
+                synthesis_title = "DNA synthesis cost trajectory"
+                synthesis_figure = dna_unit_cost_chart(
+                    dna_costs,
+                    "synthesis_cost_usd_per_mb",
+                    synthesis_title,
+                    chart_palette["unit_cost_colors"]["synthesis"],
+                    log_scale,
+                    theme=theme,
+                    history=synthesis_history,
+                )
+                _render_chart(
+                    synthesis_figure,
+                    key="chart_dna_synthesis",
+                    filename="dna-synthesis-cost-trajectory",
+                )
+                st.caption(
+                    "Modeled cost to synthesize enough DNA bases for 1 MB of logical data. "
+                    "Redundancy, indexing, and coding overhead are not added here. The dotted "
+                    "trend is the paper's historical fit, not a raw dataset: no public per-MB "
+                    "synthesis price series exists the way NHGRI's sequencing table does."
+                )
+                synthesis_data = dna_costs[["year", "synthesis_cost_usd_per_mb"]]
+                _chart_downloads(
+                    "dna_synthesis",
+                    synthesis_data,
+                    "dna-synthesis-cost-trajectory",
+                    "chart_dna_synthesis",
+                )
+            with chart_columns[1]:
+                sequencing_title = "DNA sequencing cost trajectory"
+                sequencing_figure = dna_unit_cost_chart(
+                    dna_costs,
+                    "sequencing_cost_usd_per_mb",
+                    sequencing_title,
+                    chart_palette["unit_cost_colors"]["sequencing"],
+                    log_scale,
+                    theme=theme,
+                    observed=observed_sequencing,
+                )
+                _render_chart(
+                    sequencing_figure,
+                    key="chart_dna_sequencing",
+                    filename="dna-sequencing-cost-trajectory",
+                )
+                st.caption(
+                    "Modeled cost to sequence and retrieve 1 MB of logical data. "
+                    "It is applied to the share of the archive retrieved each year. Observed "
+                    "markers are NHGRI's reported nominal-USD cost per Mb at each date, not "
+                    "adjusted to this model's constant-USD convention."
+                )
+                sequencing_data = dna_costs[["year", "sequencing_cost_usd_per_mb"]]
+                _chart_downloads(
+                    "dna_sequencing",
+                    sequencing_data,
+                    "dna-sequencing-cost-trajectory",
+                    "chart_dna_sequencing",
+                )
+
+    if sensitivity_tab.open:
+        with sensitivity_tab:
+            _section_intro(
+                "Synthesis price needed to break even",
+                f"Maximum synthesis price in {scenario.dna_cost_base_year} at which DNA matches each "
+                "alternative over the archive lifetime. All other assumptions stay fixed.",
+            )
+            if "DNA" not in scenario.technologies:
+                st.info("Select DNA to see its break-even price and cost sensitivity.")
+            else:
+                breakeven_frame = _cached_breakeven(scenario, use_present_value)
+                if breakeven_frame.empty:
+                    st.info("Select at least one comparison technology to calculate a break-even price.")
+                else:
+                    breakeven_figure = breakeven_chart(
+                        breakeven_frame, scenario.dna_synthesis_cost_per_mb, theme=theme
+                    )
+                    _render_chart(
+                        breakeven_figure,
+                        key="chart_breakeven",
+                        filename="dna-synthesis-breakeven",
+                    )
+                    st.caption(
+                        "Not reachable means DNA retrieval alone exceeds the alternative's total cost, "
+                        "even with free synthesis. The preservation archive example uses 0.001% annual retrieval."
+                    )
+                    def _breakeven_cell(breakeven: float) -> str:
+                        if pd.isna(breakeven):
+                            return "Not reachable"
+                        return f"${format_display_number(breakeven)}/MB"
+
+                    def _direction_cell(breakeven: float, reduction_factor: float) -> str:
+                        if pd.isna(breakeven):
+                            return "—"
+                        if pd.isna(reduction_factor):
+                            return "Needs free synthesis"
+                        if breakeven < scenario.dna_synthesis_cost_per_mb:
+                            return f"{format_display_number(reduction_factor)}x lower needed"
+                        if breakeven > scenario.dna_synthesis_cost_per_mb:
+                            if scenario.dna_synthesis_cost_per_mb == 0:
+                                return "Already cheaper (free synthesis)"
+                            headroom = breakeven / scenario.dna_synthesis_cost_per_mb
+                            return f"Already cheaper ({format_display_number(headroom)}x headroom)"
+                        return "At parity today"
+
+                    breakeven_rows = [
+                        [
+                            row["technology"],
+                            _breakeven_cell(row["breakeven_synthesis_cost_usd_per_mb"]),
+                            _direction_cell(row["breakeven_synthesis_cost_usd_per_mb"], row["reduction_factor"]),
+                        ]
+                        for _, row in breakeven_frame.iterrows()
+                    ]
+                    _themed_table(
+                        ["Comparison", "Break-even synthesis cost", "Today vs. break-even"],
+                        breakeven_rows,
+                    )
+                    _chart_downloads(
+                        "breakeven",
+                        breakeven_frame,
+                        "dna-synthesis-breakeven",
+                        "chart_breakeven",
+                    )
+
+                st.markdown(
+                    """
+                    <div class="chart-divider">
+                        <h3>What drives DNA's own cost</h3>
+                        <p>Each bar re-runs the model with one input moved 50% below and 50% above your
+                    current value, within valid input limits. Other assumptions stay fixed.</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                sensitivity_frame = _cached_sensitivity(scenario, use_present_value)
+                sensitivity_figure = sensitivity_chart(sensitivity_frame, use_present_value, theme=theme)
+                _render_chart(
+                    sensitivity_figure,
+                    key="chart_sensitivity",
+                    filename="dna-cost-sensitivity",
+                )
+                st.caption(
+                    "The dotted line marks DNA's cost at your actual inputs. A bar with no visible width "
+                    "means that input has no effect on DNA's cost in this scenario — average asset size, "
+                    "for example, never enters DNA's own cost formula. Hover a bar for the exact low/high "
+                    "values and resulting costs."
+                )
+                _chart_downloads(
+                    "sensitivity",
+                    sensitivity_frame,
+                    "dna-cost-sensitivity",
+                    "chart_sensitivity",
+                )
+
+    if assumptions_tab.open:
+        with assumptions_tab:
+            assumptions = load_assumptions()
+            _section_intro(
+                "Assumptions and scope",
+                "A concise record of the active scenario, included cost categories, and source references.",
+            )
+            contract = pd.DataFrame(
+                [
+                    ("Archive period", f"{scenario.start_year}-{scenario.start_year + scenario.horizon_years - 1}"),
+                    ("Annual retrieval", f"{scenario.annual_assets_retrieved:,.2f} assets ({scenario.annual_retrieval_percent:,.2f}%)"),
+                    ("Discounting", f"{scenario.discount_rate_percent:,.2f}% real; present value at storage start"),
+                    ("Currency", result.metadata["currency"]),
+                    (
+                        "DNA synthesis baseline",
+                        f"${scenario.dna_synthesis_cost_per_mb:,.6g}/MB in {scenario.dna_cost_base_year}",
+                    ),
+                    (
+                        "DNA sequencing baseline",
+                        f"${scenario.dna_sequencing_cost_per_mb:,.6g}/MB in {scenario.dna_cost_base_year}",
+                    ),
+                    (
+                        "Amazon baseline",
+                        f"${scenario.amazon_storage_usd_per_mb_month * 1_000_000:,.6g}/TB/month storage; "
+                        f"${scenario.amazon_bulk_retrieval_usd_per_mb * 1_000_000:,.6g}/TB retrieval "
+                        f"in {scenario.amazon_price_base_year}",
+                    ),
+                    (
+                        "Azure baseline",
+                        f"${scenario.azure_storage_usd_per_mb_month * 1_000_000:,.6g}/TB/month storage; "
+                        f"${scenario.azure_retrieval_usd_per_mb * 1_000_000:,.6g}/TB retrieval "
+                        f"in {scenario.azure_price_base_year}",
+                    ),
+                    (
+                        "Tape baseline",
+                        f"${scenario.tape_media_usd_per_tb:,.6g}/TB media; "
+                        f"${scenario.tape_hardware_usd_per_tb:,.6g}/TB hardware; "
+                        f"${scenario.tape_energy_usd_per_tb_year:,.6g}/TB/year energy "
+                        f"in {scenario.tape_price_base_year}",
+                    ),
+                    ("Horizon convention", result.metadata["horizon_convention"]),
+                ],
+                columns=["Item", "Value"],
+            )
+            contract_column, context_column = st.columns([1.45, 1], gap="large")
+            with contract_column:
+                st.subheader("Scenario contract")
+                _themed_table(
+                    list(contract.columns),
+                    [list(row) for row in contract.itertuples(index=False)],
+                )
+            with context_column:
+                st.subheader("Cost scope")
+                st.write(
+                    "Included: DNA synthesis and sequencing, cloud write/retrieval/storage charges, "
+                    "tape media/hardware/energy assumptions, and the selected custom capacity/request charges. "
+                    "Excluded: labor, cloud egress, taxes, retrieval latency, minimum-storage penalties, "
+                    "facilities, and unmodeled migrations."
+                )
+                st.subheader("Sources")
+                for source in assumptions["sources"].values():
+                    st.markdown(f"- [{source['label']}]({source['url']})")
+
+    if about_tab.open:
+        with about_tab:
+            _section_intro(
+                "About this explorer",
+                "An interactive implementation of a DNA storage cost model for comparing long-run archival "
+                "economics across DNA, cloud archive, tape, and user-defined storage systems.",
+            )
+            about_column, paper_column = st.columns([1.25, 1], gap="large")
+            with about_column:
+                st.subheader("Purpose")
+                st.write(
+                    "The explorer turns the model assumptions into adjustable controls, then recalculates "
+                    "lifecycle cost, start-year sensitivity, and DNA unit-cost trajectories for the selected "
+                    "archive workload."
+                )
+                st.subheader("Model boundary")
+                st.write(
+                    "The results are scenario estimates, not procurement quotes. They use the visible inputs "
+                    "and listed assumptions, and exclude operational details such as labor, taxes, cloud egress, "
+                    "retrieval latency, and migration execution risk."
+                )
+            with paper_column:
+                st.subheader("Reference paper")
+                st.markdown(
+                    "[DNA Storage Cost Model](https://doi.org/10.48550/arXiv.2608.26342)"
+                )
+                st.write(
+                    "Use the linked paper as the source reference for the model framing and baseline assumptions."
+                )
+                st.subheader("Contact")
+                st.markdown("[alex@el-shaikh.com](mailto:alex@el-shaikh.com)")
+
+
+_render_analysis()

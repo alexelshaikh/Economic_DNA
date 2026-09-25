@@ -1,3 +1,4 @@
+import json
 import unittest
 from pathlib import Path
 
@@ -18,6 +19,47 @@ class StreamlitAppTests(unittest.TestCase):
     @staticmethod
     def _click_button(app: AppTest, key: str) -> None:
         next(button for button in app.button if button.key == key).click()
+
+    @staticmethod
+    def _open_tab(app: AppTest, label: str) -> None:
+        app.session_state["analysis_tabs"] = label
+        app.run()
+
+    @staticmethod
+    def _form_config(app: AppTest) -> dict:
+        body = next(element.proto.body for element in app.get("html") if "form-controls-marker" in element.proto.body)
+        return json.JSONDecoder().raw_decode(body.split("const config = ", 1)[1])[0]
+
+    def test_pending_state_accounts_for_display_precision(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        config = self._form_config(app)
+        for widget in app.number_input:
+            if widget.key not in config["displayed"]:
+                continue
+            with self.subTest(key=widget.key):
+                self.assertEqual(config["displayed"][widget.key], float(widget.proto.format % widget.value))
+        self.assertEqual(config["committed"], app.session_state["committed_widgets"])
+
+    def test_pending_reference_changes_only_after_calculate(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        before = self._form_config(app)["committed"]
+        self._click_button(app, "preset_4")
+        app.run()
+        self.assertEqual(self._form_config(app)["committed"], before)
+        self._submit_form(app)
+        app.run()
+        self.assertEqual(self._form_config(app)["committed"]["archive_unit"], "PB")
+        self.assertEqual(self._form_config(app)["committed"]["retrieval"], 0.001)
+
+    def test_client_configuration_escapes_user_html(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        name = "</script><script>window.untrusted = true</script>"
+        app.text_input(key="custom_name").set_value(name)
+        self._submit_form(app)
+        app.run()
+        self.assertEqual(self._form_config(app)["committed"]["custom_name"], name)
+        body = next(element.proto.body for element in app.get("html") if "form-controls-marker" in element.proto.body)
+        self.assertNotIn(name, body)
 
     def test_paper_baseline_renders_without_exceptions(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
@@ -43,13 +85,10 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertTrue(
             any("Paper / About" in (markdown.value or "") for markdown in app.markdown)
         )
-        self.assertTrue(
-            any("mailto:alex@el-shaikh.com" in (markdown.value or "") for markdown in app.markdown)
-        )
         self.assertEqual(len(app.metric), 4)
-        self.assertEqual(len(app.get("plotly_chart")), 7)
+        self.assertEqual(len(app.get("plotly_chart")), 2)
         download_buttons = app.get("download_button")
-        self.assertEqual(len(download_buttons), 7)
+        self.assertEqual(len(download_buttons), 2)
         self.assertEqual(
             {button.key for button in download_buttons},
             {
@@ -57,11 +96,6 @@ class StreamlitAppTests(unittest.TestCase):
                 for graph in (
                     "lifecycle",
                     "breakdown",
-                    "projection",
-                    "dna_synthesis",
-                    "dna_sequencing",
-                    "breakeven",
-                    "sensitivity",
                 )
             },
         )
@@ -77,11 +111,6 @@ class StreamlitAppTests(unittest.TestCase):
                 for graph in (
                     "lifecycle",
                     "breakdown",
-                    "projection",
-                    "dna_synthesis",
-                    "dna_sequencing",
-                    "breakeven",
-                    "sensitivity",
                 )
                 for file_format in ("png", "svg")
             },
@@ -198,6 +227,7 @@ class StreamlitAppTests(unittest.TestCase):
 
     def test_sensitivity_tab_shows_breakeven_table_and_tornado_chart(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self._open_tab(app, "Sensitivity")
         self.assertFalse(app.exception)
         chart_keys = {chart.key for chart in app.get("plotly_chart")}
         self.assertIn("chart_breakeven", chart_keys)
@@ -213,9 +243,11 @@ class StreamlitAppTests(unittest.TestCase):
 
     def test_sensitivity_tab_asks_for_dna_when_it_is_not_selected(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self._open_tab(app, "Sensitivity")
         app.checkbox(key="tech_dna").uncheck()
         self._submit_form(app)
         app.run()
+        self._open_tab(app, "Sensitivity")
         self.assertFalse(app.exception)
         chart_keys = {chart.key for chart in app.get("plotly_chart")}
         self.assertNotIn("chart_breakeven", chart_keys)
@@ -246,7 +278,7 @@ class StreamlitAppTests(unittest.TestCase):
         app.run()
         self.assertFalse(app.exception)
         self.assertEqual(app.number_input(key="archive_value").value, 1.0)
-        self.assertEqual(app.selectbox(key="archive_unit").value, "PB")
+        self.assertEqual(app.radio(key="archive_unit").value, "PB")
         self.assertEqual(app.number_input(key="asset_value").value, preset.average_asset_size_mb)
         self.assertEqual(app.number_input(key="retrieval").value, preset.annual_retrieval_percent)
         self.assertEqual(app.number_input(key="horizon").value, preset.horizon_years)

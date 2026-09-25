@@ -4,6 +4,11 @@ from dataclasses import asdict, dataclass, replace
 import math
 from typing import Any, Mapping
 
+from .assumptions import load_assumptions
+
+
+_ASSUMPTIONS = load_assumptions()
+
 
 DEFAULT_SYNTHESIS_DECLINE = 0.1538850043930884
 DEFAULT_SEQUENCING_DECLINE = 0.38065945245876087
@@ -19,34 +24,34 @@ class Scenario:
     start_year: int = 2025
     horizon_years: int = 100
     discount_rate_percent: float = 0.0
-    dna_cost_base_year: int = 2026
-    dna_synthesis_cost_per_mb: float = 16573.838543736347
-    dna_sequencing_cost_per_mb: float = 0.13475734873958314
+    dna_cost_base_year: int = _ASSUMPTIONS["dna"]["editable_cost_base_year"]
+    dna_synthesis_cost_per_mb: float = _ASSUMPTIONS["dna"]["editable_synthesis_usd_per_mb"]
+    dna_sequencing_cost_per_mb: float = _ASSUMPTIONS["dna"]["editable_sequencing_usd_per_mb"]
     synthesis_decline_percent: float = DEFAULT_SYNTHESIS_DECLINE * 100
     sequencing_decline_percent: float = DEFAULT_SEQUENCING_DECLINE * 100
-    amazon_price_base_year: int = 2025
-    amazon_put_usd_per_request: float = 0.00005
-    amazon_bulk_restore_usd_per_request: float = 0.000025
-    amazon_bulk_retrieval_usd_per_mb: float = 0.00000244140625
-    amazon_storage_usd_per_mb_month: float = 0.000000966796875
+    amazon_price_base_year: int = _ASSUMPTIONS["amazon"]["price_base_year"]
+    amazon_put_usd_per_request: float = _ASSUMPTIONS["amazon"]["put_usd_per_request"]
+    amazon_bulk_restore_usd_per_request: float = _ASSUMPTIONS["amazon"]["bulk_restore_usd_per_request"]
+    amazon_bulk_retrieval_usd_per_mb: float = _ASSUMPTIONS["amazon"]["bulk_retrieval_usd_per_mb"]
+    amazon_storage_usd_per_mb_month: float = _ASSUMPTIONS["amazon"]["storage_usd_per_mb_month"]
     amazon_decline_percent: float = 10.0
-    azure_price_base_year: int = 2025
-    azure_write_usd_per_request: float = 0.00001
-    azure_read_usd_per_request: float = 0.0005
-    azure_retrieval_usd_per_mb: float = 0.00001953125
-    azure_storage_usd_per_mb_month: float = 0.000001953125
+    azure_price_base_year: int = _ASSUMPTIONS["azure"]["price_base_year"]
+    azure_write_usd_per_request: float = _ASSUMPTIONS["azure"]["write_usd_per_request"]
+    azure_read_usd_per_request: float = _ASSUMPTIONS["azure"]["read_usd_per_request"]
+    azure_retrieval_usd_per_mb: float = _ASSUMPTIONS["azure"]["retrieval_usd_per_mb"]
+    azure_storage_usd_per_mb_month: float = _ASSUMPTIONS["azure"]["storage_usd_per_mb_month"]
     azure_decline_percent: float = 10.0
-    tape_price_base_year: int = 2025
-    tape_media_usd_per_tb: float = 6.39
-    tape_hardware_usd_per_tb: float = 6.86
-    tape_energy_usd_per_tb_year: float = 0.05
+    tape_price_base_year: int = _ASSUMPTIONS["tape"]["price_base_year"]
+    tape_media_usd_per_tb: float = _ASSUMPTIONS["tape"]["media_usd_per_tb"]
+    tape_hardware_usd_per_tb: float = _ASSUMPTIONS["tape"]["hardware_usd_per_tb"]
+    tape_energy_usd_per_tb_year: float = _ASSUMPTIONS["tape"]["energy_usd_per_tb_year"]
     tape_media_decline_percent: float = 20.0
     tape_hardware_decline_percent: float = 0.0
     tape_energy_decline_percent: float = 15.0
-    dna_durability_years: int = 1000
-    tape_durability_years: int = 30
+    dna_durability_years: int = _ASSUMPTIONS["dna"]["durability_years"]
+    tape_durability_years: int = _ASSUMPTIONS["tape"]["durability_years"]
     custom_storage_name: str = "Custom storage"
-    custom_cost_base_year: int = 2026
+    custom_cost_base_year: int = _ASSUMPTIONS["custom_storage"]["cost_base_year"]
     custom_write_cost_per_tb: float = 0.0
     custom_write_cost_per_asset: float = 0.0
     custom_storage_cost_per_tb_year: float = 0.0
@@ -58,6 +63,14 @@ class Scenario:
 
     def __post_init__(self) -> None:
         errors: list[str] = []
+        for name in (
+            "start_year", "horizon_years", "dna_cost_base_year", "dna_durability_years",
+            "amazon_price_base_year", "azure_price_base_year", "tape_price_base_year",
+            "tape_durability_years", "custom_cost_base_year", "custom_replacement_years",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int):
+                errors.append(f"{name} must be a whole number")
         if not (0 < self.archive_size_tb <= 1_000_000_000):
             errors.append("archive_size_tb must be greater than 0 and at most 1 billion TB")
         if not (0 < self.average_asset_size_mb <= self.archive_size_mb):
