@@ -209,6 +209,8 @@ body:has(.st-key-sidebar-advanced-toggle input:checked) [class*="st-key-advanced
 .tab-intro h2 { font-size: 1.25rem !important; margin: 0 0 0.35rem; padding: 0; }
 .tab-intro p, .chart-divider p { margin: 0; color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
 .viability-summary { margin: 0; color: var(--muted); font-size: 0.95rem; line-height: 1.5; overflow-wrap: anywhere; }
+.viability-summary p { margin: 0 0 0.4rem; font-size: 0.95rem; color: var(--ink); }
+.viability-explanation { margin: 0; color: var(--muted); font-size: 0.95rem; line-height: 1.6; overflow-wrap: anywhere; }
 .st-key-analysis_tabs [data-testid="stTextInput"] label p { color: var(--ink); font-size: 0.95rem; }
 .st-key-analysis_tabs [data-testid="stTextInputRootElement"] { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
 .st-key-analysis_tabs [data-testid="stTextInputRootElement"] input { background: transparent; color: var(--ink); }

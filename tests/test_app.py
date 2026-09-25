@@ -438,6 +438,43 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertIsNone(app.session_state["viability_applied_range"])
         self.assertGreaterEqual(float(app.text_input(key="viability_min").value), 0)
 
+    def test_viability_copy_distinguishes_extra_cost_from_negative_prices(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+
+        def text(kind):
+            return next(e.proto.body for e in app.get("html") if f'class="{kind}"' in e.proto.body)
+
+        summary = text("viability-summary")
+        self.assertIn("USD 16,573.8 per MB (2026 base-year assumption)", summary)
+        self.assertIn("billion more than Amazon Deep Archive", summary)
+        self.assertIn("100-year undiscounted totals at calculated inputs: DNA:", summary)
+        self.assertIn("; Amazon Deep Archive: USD ", summary)
+        self.assertNotIn("DNA gain vs.", summary)
+        explanation = text("viability-explanation")
+        self.assertIn("credit per MB written", explanation)
+        self.assertIn("Even free synthesis cannot match Amazon Deep Archive", explanation)
+        self.assertIn("DNA&#x27;s sequencing cost alone", explanation)
+        self.assertIn("credit of about USD ", explanation)
+        app.selectbox(key="viability_driver").select("dna_sequencing_cost_per_mb").run()
+        explanation = text("viability-explanation")
+        self.assertIn("credit per MB retrieved", explanation)
+        self.assertIn("Even free sequencing cannot match", explanation)
+        self.assertIn("DNA&#x27;s synthesis cost alone", explanation)
+
+    def test_viability_copy_handles_savings_and_equal_discounted_costs(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20)
+        app.query_params.update({"dna_synthesis_cost_per_mb": "0", "dna_sequencing_cost_per_mb": "0", "discount_rate_percent": "3"})
+        app.run()
+        summary = next(e.proto.body for e in app.get("html") if 'class="viability-summary"' in e.proto.body)
+        self.assertIn("less than Amazon Deep Archive", summary)
+        self.assertIn("present-value totals", summary)
+        self.assertIn("DNA: USD 0;", summary)
+        app.checkbox(key="tech_custom").check()
+        app.button(key="calculate_header").click().run()
+        app.selectbox(key="viability_comparison").select("Custom storage").run()
+        summary = next(e.proto.body for e in app.get("html") if 'class="viability-summary"' in e.proto.body)
+        self.assertIn("DNA and Custom storage have equal total costs", summary)
+
     def test_viability_comparison_falls_back_when_model_is_removed(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
         self._open_tab(app, "Sensitivity")

@@ -236,7 +236,7 @@ def check(url: str, output: Path, channel: str | None) -> None:
         assert viability.evaluate("e => e.layout.yaxis.range[0] < 0 && e.layout.yaxis.range[1] > 0")
         assert viability.evaluate("e => e.data[0].y.some(y => y > 0) && e.data[1].y.some(y => y < 0)")
         frame_viability()
-        expect(page.locator(".viability-summary")).to_contain_text("123 $/MB")
+        expect(page.locator(".viability-summary")).to_contain_text("USD 123 per MB")
         expect(page.locator(".viability-summary .katex")).to_have_count(0)
         shot("viability-break-even")
         button("theme_toggle").click()

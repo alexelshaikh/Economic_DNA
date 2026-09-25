@@ -519,6 +519,13 @@ def _money(value: float) -> str:
     return f"${value:,.3g}"
 
 
+def _money_in_words(value: float) -> str:
+    for threshold, unit in ((1e12, "trillion"), (1e9, "billion"), (1e6, "million")):
+        if abs(value) >= threshold:
+            return f"USD {value / threshold:,.6g} {unit}"
+    return f"USD {value:,.6g}"
+
+
 def _quantity(value: float) -> str:
     absolute = abs(value)
     for threshold, suffix in ((1e15, "Q"), (1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
@@ -1771,6 +1778,7 @@ def _render_analysis() -> None:
                 )
                 try:
                     viability = _cached_viability(scenario, driver, comparison, use_present_value, focus)
+                    automatic_viability = viability
                     default_range = (float(viability.curve.parameter_value.min()), float(viability.curve.parameter_value.max()))
                     range_context = (scenario, driver, comparison, use_present_value, focus)
                     if st.session_state.get("viability_range_context") != range_context:
@@ -1810,17 +1818,51 @@ def _render_analysis() -> None:
                     st.warning(str(error))
                 else:
                     spec = viability.parameter
-                    sign = "-" if viability.current_gain < 0 else "+"
-                    price_year = f" ({scenario.dna_cost_base_year} price)" if spec.unit == "$/MB" else ""
-                    gain_label = "DNA present-value gain" if viability.use_present_value else "DNA gain"
-                    summary = (
-                        f"Current {spec.label.lower()}{price_year}: {format_display_number(viability.current_value)} {spec.unit}. "
-                        f"{gain_label} vs. {viability.comparison}: {sign}${format_display_number(abs(viability.current_gain))}."
+                    if spec.unit == "$/MB":
+                        current_text = (
+                            f"Current {spec.label.lower()}: USD {viability.current_value:,.6g} per MB "
+                            f"({scenario.dna_cost_base_year} base-year assumption)."
+                        )
+                    else:
+                        current_text = f"Current {spec.label.lower()}: {viability.current_value:,.6g} {spec.unit}."
+                    if viability.current_gain == 0:
+                        difference = f"DNA and {viability.comparison} have equal total costs."
+                    else:
+                        direction = "more" if viability.current_gain < 0 else "less"
+                        difference = f"DNA costs about {_money_in_words(abs(viability.current_gain))} {direction} than {viability.comparison}."
+                    basis = "present-value" if viability.use_present_value else "undiscounted"
+                    totals = result.totals.set_index("technology_key")
+                    cost_column = "present_value_usd" if viability.use_present_value else "total_cost_usd"
+                    totals_text = (
+                        f"{scenario.horizon_years}-year {basis} totals at calculated inputs: "
+                        f"DNA: {_money_in_words(float(totals.loc['DNA', cost_column]))}; "
+                        f"{viability.comparison}: {_money_in_words(float(totals.loc[comparison, cost_column]))}."
                     )
-                    st.html(f'<p class="viability-summary">{html.escape(summary)}</p>')
+                    st.html('<div class="viability-summary">' + ''.join(
+                        f'<p>{html.escape(text)}</p>' for text in (current_text, difference, totals_text)
+                    ) + '</div>')
                     if spec.unit == "$/MB" and viability.curve.parameter_value.min() < 0:
-                        st.caption("Negative prices are theoretical subsidies, not attainable purchase prices. "
-                                   "The shaded region extends the cost model below zero; main model inputs are unchanged.")
+                        service = "synthesis" if driver == "dna_synthesis_cost_per_mb" else "sequencing"
+                        activity = "written" if service == "synthesis" else "retrieved"
+                        other_service = "sequencing" if service == "synthesis" else "synthesis"
+                        explanation = (
+                            f"In the shaded region, a negative {service} price means receiving a credit per MB "
+                            f"{activity}, instead of paying for {service}. "
+                        )
+                        negative_crossing = next((c for c in automatic_viability.crossings if c.value < 0), None)
+                        if negative_crossing is not None:
+                            explanation += (
+                                f"Even free {service} cannot match {viability.comparison}: DNA's {other_service} "
+                                f"cost alone exceeds that alternative's total. The theoretical break-even requires "
+                                f"a credit of about USD {abs(negative_crossing.value):,.6g} per MB {activity} "
+                                f"at the {scenario.dna_cost_base_year} base year. "
+                            )
+                        explanation += (
+                            f"The credit follows the selected {service} price-decline rate in other years. "
+                            "This is a hypothetical offset to DNA's costs, not a negative price for the comparison "
+                            "model or a market-price forecast."
+                        )
+                        st.html(f'<p class="viability-explanation">{html.escape(explanation)}</p>')
                     _render_chart(viability_chart(viability, theme), key="chart_viability", filename="dna-cost-advantage")
                     if not viability.crossings:
                         if (viability.curve["gain_usd"] == 0).all():
