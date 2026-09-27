@@ -1,7 +1,7 @@
 metadata:
   model_version: "1.4.0"
-  last_reviewed: "2025-07-01"
-  currency: "constant 2025 USD"
+  last_reviewed: "2026-09-27"
+  currency: "United States dollars (USD); 2026 price baseline; no inflation or PPP adjustment"
   horizon_convention: "A horizon of d years includes start_year through start_year + d - 1."
   disclaimer: "Scenario model, not a price forecast or purchasing quote."
 
@@ -19,8 +19,8 @@ sources:
     label: "Azure Blob Storage pricing"
     url: "https://azure.microsoft.com/en-us/pricing/details/storage/blobs/"
   tape:
-    label: "Tape assumptions used in the paper model"
-    url: "https://github.com/alexelshaikh/Economic_DNA"
+    label: "HPE Q2079A LTO-9 media: $104.14 / 18 TB native; hardware and energy remain model assumptions"
+    url: "https://buy.hpe.com/us/en/storage/storage-media/tape-media/hpe-storage-lto-ultrium-cartridges/p/34648"
 
 dna:
   editable_cost_base_year: 2026
@@ -42,22 +42,24 @@ custom_storage:
   cost_base_year: 2026
 
 amazon:
-  price_base_year: 2025
+  price_base_year: 2026
   put_usd_per_request: 0.00005
   bulk_restore_usd_per_request: 0.000025
-  bulk_retrieval_usd_per_mb: 0.00000244140625
-  storage_usd_per_mb_month: 0.000000966796875
+  # Provider GB is binary (2^30 bytes); model MB is decimal (10^6 bytes).
+  bulk_retrieval_usd_per_mb: 0.0000023283064365386963
+  storage_usd_per_mb_month: 0.0000009220093488693237
 
 azure:
-  price_base_year: 2025
+  price_base_year: 2026
   write_usd_per_request: 0.00001
   read_usd_per_request: 0.0005
-  retrieval_usd_per_mb: 0.00001953125
-  storage_usd_per_mb_month: 0.000001953125
+  retrieval_usd_per_mb: 0.00001862645149230957
+  storage_usd_per_mb_month: 0.000001862645149230957
 
 tape:
-  price_base_year: 2025
-  media_usd_per_tb: 6.39
+  price_base_year: 2026
+  # Q2079A reseller price on HPE Store, divided by native capacity, not compressed.
+  media_usd_per_tb: 5.785555555555556
   hardware_usd_per_tb: 6.86
   energy_usd_per_tb_year: 0.05
   durability_years: 30

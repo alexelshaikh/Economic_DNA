@@ -1732,7 +1732,7 @@ def _render_analysis() -> None:
                     "Modeled cost to sequence and retrieve 1 MB of logical data. "
                     "It is applied to the share of the archive retrieved each year. Observed "
                     "markers are NHGRI's reported nominal-USD cost per Mb at each date, not "
-                    "adjusted to this model's constant-USD convention."
+                    "inflation- or PPP-adjusted."
                 )
                 sequencing_data = dna_costs[["year", "sequencing_cost_usd_per_mb"]]
                 _chart_downloads(

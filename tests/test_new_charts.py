@@ -111,7 +111,7 @@ class ProjectionOverlayChartTests(unittest.TestCase):
                     self.assertTrue(all(len(a.text) < 25 for a in figure.layout.annotations))
                     self.assertEqual(len({a.y for a in figure.layout.annotations}), len(expected))
                     for annotation in figure.layout.annotations:
-                        if annotation.x > (2025 + 2350) / 2:
+                        if annotation.x > (Scenario().start_year + 2350) / 2:
                             self.assertEqual(annotation.xanchor, "right")
                             self.assertLess(annotation.xshift, 0)
 
@@ -126,7 +126,7 @@ class ProjectionOverlayChartTests(unittest.TestCase):
         scenario = Scenario(dna_synthesis_cost_per_mb=0.0, dna_sequencing_cost_per_mb=0.0)
         projection = simulate_start_years(scenario, 2030)
         figure = projection_chart(projection, False, False, crossovers=find_crossover_years(projection))
-        self.assertEqual([shape.x0 for shape in figure.layout.shapes], [2025] * 3)
+        self.assertEqual([shape.x0 for shape in figure.layout.shapes], [scenario.start_year] * 3)
         self.assertEqual(len({a.y for a in figure.layout.annotations}), 3)
         self.assertTrue(all(a.xanchor == "left" for a in figure.layout.annotations))
 

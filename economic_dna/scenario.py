@@ -21,7 +21,7 @@ class Scenario:
     archive_size_tb: float = 1.0
     average_asset_size_mb: float = 1000.0
     annual_retrieval_percent: float = 1.0
-    start_year: int = 2025
+    start_year: int = 2026
     horizon_years: int = 100
     discount_rate_percent: float = 0.0
     dna_cost_base_year: int = _ASSUMPTIONS["dna"]["editable_cost_base_year"]

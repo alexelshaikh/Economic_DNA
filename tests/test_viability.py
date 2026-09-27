@@ -110,7 +110,7 @@ class ViabilityTests(unittest.TestCase):
         self.assertGreater(result.curve.gain_usd.nunique(), 1)
 
     def test_nonmonotonic_decline_marks_both_crossings(self):
-        scenario = Scenario(horizon_years=30, dna_durability_years=1, dna_cost_base_year=2026,
+        scenario = Scenario(start_year=2025, horizon_years=30, dna_durability_years=1, dna_cost_base_year=2026,
                             dna_synthesis_cost_per_mb=1e-6, dna_sequencing_cost_per_mb=0,
                             technologies=("DNA", "Custom storage"), custom_write_cost_per_tb=10)
         result = dna_cost_advantage(scenario, "synthesis_decline_percent", "Custom storage", False)

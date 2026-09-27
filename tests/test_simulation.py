@@ -13,7 +13,39 @@ from economic_dna import (
 )
 
 
+def legacy_paper_scenario():
+    # Keep the 2025 reference comparison independent of updated website defaults.
+    return Scenario(
+        start_year=2025,
+        amazon_price_base_year=2025,
+        amazon_bulk_retrieval_usd_per_mb=0.0025 / 1024,
+        amazon_storage_usd_per_mb_month=0.00099 / 1024,
+        azure_price_base_year=2025,
+        azure_retrieval_usd_per_mb=0.02 / 1024,
+        azure_storage_usd_per_mb_month=0.002 / 1024,
+        tape_price_base_year=2025, tape_media_usd_per_tb=6.39,
+        tape_media_decline_percent=20, tape_hardware_decline_percent=0,
+        tape_energy_decline_percent=15,
+    )
+
+
 class ScenarioTests(unittest.TestCase):
+    def test_2026_prices_and_decimal_capacity_units(self):
+        scenario = Scenario()
+        self.assertEqual(scenario.start_year, 2026)
+        for provider in ("amazon", "azure", "tape"):
+            self.assertEqual(getattr(scenario, f"{provider}_price_base_year"), 2026)
+        for field, price_per_gib in (
+            ("amazon_storage_usd_per_mb_month", 0.00099),
+            ("amazon_bulk_retrieval_usd_per_mb", 0.0025),
+            ("azure_storage_usd_per_mb_month", 0.002),
+            ("azure_retrieval_usd_per_mb", 0.02),
+        ):
+            self.assertAlmostEqual(getattr(scenario, field) * (2**30 / 1e6), price_per_gib, places=14)
+        self.assertAlmostEqual(scenario.tape_media_usd_per_tb * 18, 104.14)
+        self.assertEqual(scenario.amazon_decline_percent, 10)
+        self.assertEqual(scenario.azure_decline_percent, 10)
+
     def test_paper_baseline_maps_to_original_parameters(self):
         scenario = Scenario()
         self.assertEqual(scenario.number_of_assets, 1000)
@@ -57,8 +89,8 @@ class SimulationTests(unittest.TestCase):
     def test_horizon_is_number_of_charged_years(self):
         counts = self.result.yearly.groupby("technology")["year"].count()
         self.assertTrue((counts == 100).all())
-        self.assertEqual(self.result.yearly["year"].min(), 2025)
-        self.assertEqual(self.result.yearly["year"].max(), 2124)
+        self.assertEqual(self.result.yearly["year"].min(), 2026)
+        self.assertEqual(self.result.yearly["year"].max(), 2125)
 
     def test_components_sum_to_total(self):
         yearly = self.result.yearly
@@ -70,7 +102,7 @@ class SimulationTests(unittest.TestCase):
     def test_tape_replacements_are_strictly_inside_horizon(self):
         tape = self.result.yearly.query("technology == 'Tape On-premise'")
         replacement_years = tape.loc[tape["write_cost_usd"] > 0, "year"].tolist()
-        self.assertEqual(replacement_years, [2025, 2055, 2085, 2115])
+        self.assertEqual(replacement_years, [2026, 2056, 2086, 2116])
 
     def test_discounting_reduces_present_value(self):
         discounted = simulate_scenario(Scenario(discount_rate_percent=3)).totals
@@ -89,19 +121,19 @@ class SimulationTests(unittest.TestCase):
                 n=1000, k=10, obj_size_mb=1000, start_year=2025, d=100
             ),
         }
-        totals = self.result.totals.set_index("technology")["total_cost_usd"]
+        totals = simulate_scenario(legacy_paper_scenario()).totals.set_index("technology")["total_cost_usd"]
         for technology, model in reference_models.items():
             with self.subTest(technology=technology):
                 self.assertAlmostEqual(totals[technology], float(model.eval().doit()), places=5)
 
     def test_start_year_projection_and_crossover_contract(self):
         projection = simulate_start_years(self.scenario, 2027)
-        self.assertEqual(sorted(projection["start_year"].unique().tolist()), [2025, 2026, 2027])
+        self.assertEqual(sorted(projection["start_year"].unique().tolist()), [2026, 2027])
         crossovers = find_crossover_years(projection)
         self.assertEqual(set(crossovers), set(self.scenario.technologies) - {"DNA"})
 
     def test_paper_baseline_crossover_years(self):
-        projection = simulate_start_years(self.scenario, 2350)
+        projection = simulate_start_years(legacy_paper_scenario(), 2350)
         self.assertEqual(
             find_crossover_years(projection),
             {

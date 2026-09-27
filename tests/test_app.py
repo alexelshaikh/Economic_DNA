@@ -5,7 +5,7 @@ from pathlib import Path
 from streamlit.delta_generator_singletons import get_dg_singleton_instance
 from streamlit.testing.v1 import AppTest
 
-from economic_dna import PRESET_SCENARIOS, Scenario
+from economic_dna import PRESET_SCENARIOS, Scenario, find_crossover_years, simulate_start_years
 
 
 class StreamlitAppTests(unittest.TestCase):
@@ -304,8 +304,8 @@ class StreamlitAppTests(unittest.TestCase):
         )
         # The panel widgets are always mounted (hidden by CSS when closed).
         self.assertEqual(app.number_input(key="amazon_put_per_1000").value, 0.05)
-        self.assertEqual(app.number_input(key="azure_storage_per_tb_month").value, 1.953125)
-        self.assertEqual(app.number_input(key="tape_media_per_tb").value, 6.39)
+        self.assertAlmostEqual(app.number_input(key="azure_storage_per_tb_month").value, 0.002 * 1e12 / 2**30)
+        self.assertAlmostEqual(app.number_input(key="tape_media_per_tb").value, 104.14 / 18)
         self.assertEqual(
             app.number_input(key="tape_media_per_tb").label,
             "Tape cartridges (USD/TB per write)",
@@ -348,7 +348,8 @@ class StreamlitAppTests(unittest.TestCase):
         self.assertFalse(app.exception)
         chart = next(chart for chart in app.get("plotly_chart") if chart.key == "chart_projection")
         layout = json.loads(chart.proto.spec)["layout"]
-        self.assertEqual([shape["x0"] for shape in layout["shapes"]], [2332, 2321, 2149])
+        expected = find_crossover_years(simulate_start_years(Scenario(), 2350))
+        self.assertEqual([shape["x0"] for shape in layout["shapes"]], [year for year in expected.values() if year is not None])
         table = " ".join(markdown.value or "" for markdown in app.markdown)
         for annotation in layout["annotations"]:
             self.assertIn(str(annotation["x"]), table)

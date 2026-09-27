@@ -19,7 +19,7 @@ SEQUENCING_HISTORY_CSV = DATA_DIR / "Sequencing_Cost_Data_Table_May2022.csv"
 @lru_cache(maxsize=1)
 def load_observed_sequencing_costs() -> pd.DataFrame:
     """NHGRI's measured cost per Mb of sequenced DNA, nominal USD at each
-    reporting date (not adjusted for the model's constant-USD convention)."""
+    reporting date (not inflation- or PPP-adjusted)."""
     frame = pd.read_csv(SEQUENCING_HISTORY_CSV, parse_dates=["Date"])
     year = frame["Date"].dt.year + (frame["Date"].dt.dayofyear - 1) / 365.25
     return (
