@@ -470,8 +470,8 @@ def projection_chart(
             figure, last["start_year"], last[value], color, surface, technology, technology
         )
     figure.update_layout(
-        title="Lifecycle cost by storage start year",
-        xaxis_title="Storage start year",
+        title="Lifecycle cost by storage deployment year",
+        xaxis_title="Storage deployment year",
         yaxis_title="Present value (USD)" if use_present_value else "Lifecycle cost (USD)",
         yaxis_type="log" if log_scale else "linear",
         legend={"orientation": "h", "y": 1.12, "x": 0},
