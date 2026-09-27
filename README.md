@@ -1,6 +1,34 @@
 # An Economic Analysis of DNA-based Data Storage Systems  
 ## Alex El-Shaikh, Bernhard Seeger, and Thomas Heinis
 
+## Paper figure notebook
+
+Open `Figures_Paper_2026.ipynb` with the repository's Python environment. Run the
+two setup cells, then any of the 40 figure cells independently. Each cell has a
+`SAVE` switch: `True` exports PDF, SVG, PNG, CSV data, caption and scenario metadata;
+`False` previews only. Exports go to `figs/paper_2026/`. An optional export cell
+bundles the figures rendered in this session into one PDF.
+
+The final cell defines `export_results_figures()` to regenerate the 15 selected
+Results figures from the saved notebook and export PDF/EPS to the paper's
+`figures/results` directory. Default canvas sizes are preserved; use
+`figure_sizes={"F1": (9, 6)}` for individual overrides or `default_size=(10.5, 6.7)`
+for a shared size (inches). Save notebook edits before calling it. Tight cropping
+can change final page dimensions; EPS renders transparency as opaque artwork.
+
+This consolidates the 14 original figure panels and the 12 sensitivity figures,
+using the current 2026 calculator assumptions. Original notebooks are untouched.
+Model conventions and intentional differences from the legacy figures are listed
+at the top of the new notebook. Tape decline assumptions remain unchanged pending
+the paper's review.
+
+Install notebook dependencies with `pip install -r requirements-notebooks.txt`.
+`python scripts/validate_paper_notebook.py` tests independent rendering and exports
+under `.tmp/paper_notebook_validation/`, without overwriting publication figures.
+The notebook itself is the editable working document; the initial-generation script
+`scripts/build_paper_notebook.py` overwrites it and should not be rerun after manual
+notebook edits unless those changes have been incorporated into that script.
+
 ## Interactive cost explorer
 
 The repository includes a journalist-facing web calculator in `streamlit_app.py`. It uses a

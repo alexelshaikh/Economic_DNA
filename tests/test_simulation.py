@@ -45,6 +45,9 @@ class ScenarioTests(unittest.TestCase):
         self.assertAlmostEqual(scenario.tape_media_usd_per_tb * 18, 104.14)
         self.assertEqual(scenario.amazon_decline_percent, 10)
         self.assertEqual(scenario.azure_decline_percent, 10)
+        self.assertEqual(scenario.tape_media_decline_percent, 20)
+        self.assertEqual(scenario.tape_hardware_decline_percent, 10)
+        self.assertEqual(scenario.tape_energy_decline_percent, 15)
 
     def test_paper_baseline_maps_to_original_parameters(self):
         scenario = Scenario()

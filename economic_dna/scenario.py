@@ -46,7 +46,7 @@ class Scenario:
     tape_hardware_usd_per_tb: float = _ASSUMPTIONS["tape"]["hardware_usd_per_tb"]
     tape_energy_usd_per_tb_year: float = _ASSUMPTIONS["tape"]["energy_usd_per_tb_year"]
     tape_media_decline_percent: float = 20.0
-    tape_hardware_decline_percent: float = 0.0
+    tape_hardware_decline_percent: float = 10.0
     tape_energy_decline_percent: float = 15.0
     dna_durability_years: int = _ASSUMPTIONS["dna"]["durability_years"]
     tape_durability_years: int = _ASSUMPTIONS["tape"]["durability_years"]

@@ -326,6 +326,28 @@ class StreamlitAppTests(unittest.TestCase):
             any("avoid double counting" in (caption.value or "") for caption in app.caption)
         )
 
+    def test_tape_defaults_and_reset_match_paper(self):
+        app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
+        self.assertFalse(app.exception)
+        expected = {
+            "tape_media_decline": 20.0,
+            "tape_hardware_decline": 10.0,
+            "tape_energy_decline": 15.0,
+        }
+        config = self._form_config(app)
+        for key, value in expected.items():
+            with self.subTest(key=key):
+                self.assertEqual(app.number_input(key=key).value, value)
+                self.assertEqual(app.number_input(key=key).proto.default, value)
+                self.assertEqual(config["actions"]["reset_tape"]["values"][key], value)
+                self.assertEqual(config["actions"]["global_reset"]["values"][key], value)
+                app.number_input(key=key).set_value(0.0)
+        self._click_button(app, "reset_tape")
+        app.run()
+        self.assertFalse(app.exception)
+        for key, value in expected.items():
+            self.assertEqual(app.number_input(key=key).value, value)
+
     def test_model_reset_button_restores_model_inputs_only(self):
         app = AppTest.from_file(str(self.APP_PATH), default_timeout=20).run()
         self.assertFalse(app.exception)
