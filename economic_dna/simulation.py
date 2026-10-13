@@ -322,9 +322,9 @@ def _dna_synthesis_linear_terms(scenario: Scenario, use_present_value: bool) -> 
     fixed_terms = read_per_mb * scenario.archive_size_mb * scenario.annual_retrieval_percent / 100
 
     if use_present_value:
-        discount = np.power(1 + scenario.discount_rate_percent / 100, years - scenario.start_year)
-        coefficient_terms = coefficient_terms / discount
-        fixed_terms = fixed_terms / discount
+        discount = np.power(1 + scenario.discount_rate_percent / 100, -(years - scenario.start_year))
+        coefficient_terms = coefficient_terms * discount
+        fixed_terms = fixed_terms * discount
 
     return float(coefficient_terms.sum()), float(fixed_terms.sum())
 
@@ -335,11 +335,18 @@ BREAKEVEN_COLUMNS = ["technology", "breakeven_synthesis_cost_usd_per_mb", "reduc
 def find_breakeven_synthesis_cost(scenario: Scenario, use_present_value: bool) -> pd.DataFrame:
     """USD/MB synthesis cost at which DNA's lifecycle cost equals each
     comparison technology's, holding every other input fixed. `None` means
-    DNA cannot reach that technology's cost even with free synthesis."""
-    if "DNA" not in scenario.technologies:
+    DNA cannot reach that technology's cost even with free synthesis.
+    Raises ValueError when the threshold cannot be resolved numerically.
+    """
+    if "DNA" not in scenario.technologies or len(scenario.technologies) == 1:
         return pd.DataFrame(columns=BREAKEVEN_COLUMNS)
 
     coefficient, fixed_cost = _dna_synthesis_linear_terms(scenario, use_present_value)
+    if coefficient <= 0 or not np.isfinite([coefficient, fixed_cost]).all():
+        raise ValueError(
+            "The break-even synthesis price is outside the numeric range for these "
+            "decline rates and years. It cannot be classified as reachable or not reachable."
+        )
     value_column = "present_value_usd" if use_present_value else "total_cost_usd"
     totals = simulate_scenario(scenario).totals.set_index("technology_key")[value_column]
 
@@ -348,14 +355,18 @@ def find_breakeven_synthesis_cost(scenario: Scenario, use_present_value: bool) -
         if technology == "DNA":
             continue
         target = float(totals[technology])
-        breakeven = (target - fixed_cost) / coefficient if coefficient > 0 else None
-        if breakeven is not None and breakeven < 0:
+        breakeven = (target - fixed_cost) / coefficient
+        if breakeven < 0:
             breakeven = None
+        if breakeven is not None and not np.isfinite(breakeven):
+            raise ValueError("The break-even synthesis price exceeds the numeric range.")
         reduction_factor = (
             scenario.dna_synthesis_cost_per_mb / breakeven
             if breakeven is not None and breakeven > 0
             else None
         )
+        if reduction_factor is not None and not np.isfinite(reduction_factor):
+            raise ValueError("The synthesis price reduction factor exceeds the numeric range.")
         rows.append(
             {
                 "technology": _technology_label(scenario, technology),
@@ -404,6 +415,8 @@ def simulate_dna_uncertainty_band(
             total *= np.power(1 + scenario.discount_rate_percent / 100, -(window - scenario.start_year))
         total[:, 0] += carried_total
         np.cumsum(total, axis=1, out=total)
+        if not np.isfinite(total).all():
+            raise ValueError("The sampled uncertainty costs exceed the numeric range.")
         carried_total = total[:, -1].copy()
         percentiles[:, offset:offset + len(window)] = np.quantile(total, [0.1, 0.5, 0.9], axis=0)
     p10, p50, p90 = percentiles

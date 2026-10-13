@@ -295,6 +295,14 @@ poetry.toml
 .ruff_cache/
 .tmp/
 
+# Reproducible paper exports; keep notebooks, generators, and source data.
+/figs/paper_2026/
+/figs/paper_sensitivity/
+
+# Local screenshot and personal assistant setup.
+/screeny.png
+/setup-claude.ps1
+
 # LSP config files
 pyrightconfig.json
 

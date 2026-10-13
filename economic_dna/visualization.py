@@ -620,6 +620,9 @@ def sensitivity_chart(
     palette = palette_for(theme)
     color = technology_color("DNA", theme)
     figure = go.Figure()
+    # Missing endpoints are outside the numeric range, not zero-width bars.
+    if not frame.empty:
+        frame = frame.dropna(subset=["low_cost", "high_cost", "baseline_cost", "swing"])
     if frame.empty:
         figure.update_layout(title="What drives DNA's lifecycle cost", height=380)
         return style_figure(figure, theme)

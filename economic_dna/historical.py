@@ -16,17 +16,25 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 SEQUENCING_HISTORY_CSV = DATA_DIR / "Sequencing_Cost_Data_Table_May2022.csv"
 
 
-@lru_cache(maxsize=1)
-def load_observed_sequencing_costs() -> pd.DataFrame:
-    """NHGRI's measured cost per Mb of sequenced DNA, nominal USD at each
-    reporting date (not inflation- or PPP-adjusted)."""
+@lru_cache(maxsize=2)
+def load_observed_sequencing_costs(*, logical_mb: bool = False) -> pd.DataFrame:
+    """NHGRI's nominal USD per million sequenced bases (Mb) by default.
+
+    Set logical_mb for comparison with the storage model's USD per logical
+    megabyte. Keep raw units as the default for the historical-fit notebooks.
+    Neither representation is inflation- or PPP-adjusted.
+    """
     frame = pd.read_csv(SEQUENCING_HISTORY_CSV, parse_dates=["Date"])
     year = frame["Date"].dt.year + (frame["Date"].dt.dayofyear - 1) / 365.25
+    cost = frame["Cost per Mb"].astype(float)
+    if logical_mb:
+        dna = load_assumptions()["dna"]
+        cost = cost * dna["bases_per_byte"] * dna["bytes_per_mb"] / 1_000_000
     return (
         pd.DataFrame(
             {
                 "year": year,
-                "sequencing_cost_usd_per_mb": frame["Cost per Mb"].astype(float),
+                "sequencing_cost_usd_per_mb": cost,
             }
         )
         .sort_values("year")

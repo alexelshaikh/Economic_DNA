@@ -12,11 +12,51 @@ from economic_dna import (
     PRESET_SCENARIOS, Scenario, dna_cost_sensitivity, find_breakeven_synthesis_cost,
     simulate_dna_uncertainty_band, simulate_scenario, simulate_start_years,
 )
-from economic_dna.visualization import breakeven_chart, lifecycle_chart
+from economic_dna.visualization import breakeven_chart, lifecycle_chart, sensitivity_chart
 from tests import test_app
 
 
 class CalculationRegressions(unittest.TestCase):
+    def test_sensitivity_preserves_valid_rows_when_one_perturbation_overflows(self):
+        scenario = Scenario(dna_cost_base_year=2050, synthesis_decline_percent=70)
+        expected_baseline = simulate_scenario(scenario).totals.set_index("technology_key").loc["DNA", "total_cost_usd"]
+        frame = dna_cost_sensitivity(scenario, False)
+        np.testing.assert_allclose(frame.baseline_cost, expected_baseline)
+        row = frame.set_index("parameter").loc["Synthesis decline rate"]
+        self.assertTrue(np.isfinite(row.low_cost))
+        self.assertTrue(np.isnan(row.high_cost))
+        self.assertTrue(np.isnan(row.swing))
+        figure = sensitivity_chart(frame, False)
+        self.assertNotIn("Synthesis decline rate", figure.data[0].y)
+        self.assertEqual(len(figure.data[0].y), len(frame) - 1)
+        self.assertTrue(np.isfinite(figure.data[0].x).all())
+
+    def test_long_horizon_discounted_sensitivity_remains_finite(self):
+        frame = dna_cost_sensitivity(Scenario(horizon_years=10_000, discount_rate_percent=99), True)
+        self.assertTrue(np.isfinite(frame[["baseline_cost", "low_cost", "high_cost"]]).all().all())
+
+    def test_break_even_underflow_is_not_classified_as_unreachable(self):
+        scenario = Scenario(start_year=2400, synthesis_decline_percent=90, sequencing_decline_percent=90)
+        totals = simulate_scenario(scenario).totals.set_index("technology_key").total_cost_usd
+        self.assertEqual(totals["DNA"], 0)
+        self.assertGreater(totals["Amazon Deep Archive"], 0)
+        with self.assertRaisesRegex(ValueError, "numeric range"):
+            find_breakeven_synthesis_cost(scenario, False)
+
+    def test_break_even_overflow_does_not_return_an_infinite_price(self):
+        # The write coefficient is still representable, but the required
+        # base-year price is not when the alternative has constant costs.
+        scenario = Scenario(start_year=2345, synthesis_decline_percent=90,
+                            sequencing_decline_percent=90, amazon_decline_percent=0,
+                            technologies=("DNA", "Amazon Deep Archive"))
+        simulate_scenario(scenario)
+        with self.assertRaisesRegex(ValueError, "numeric range"):
+            find_breakeven_synthesis_cost(scenario, False)
+
+    def test_underflowing_synthesis_without_a_peer_has_no_thresholds(self):
+        scenario = Scenario(start_year=2400, synthesis_decline_percent=90, technologies=("DNA",))
+        self.assertTrue(find_breakeven_synthesis_cost(scenario, False).empty)
+
     def test_yaml_prices_are_used_when_scenario_defaults_load(self):
         import economic_dna.scenario as scenario_module
         from economic_dna.assumptions import load_assumptions
@@ -136,6 +176,66 @@ class CalculationRegressions(unittest.TestCase):
 class AppRegressions(unittest.TestCase):
     def app(self):
         return AppTest.from_file(str(test_app.StreamlitAppTests.APP_PATH), default_timeout=20)
+
+    def test_shared_inputs_outside_widget_limits_fall_back_before_rendering(self):
+        cases = (
+            {"discount_rate_percent": "99.5"},
+            {"archive_size_tb": "0.0001", "average_asset_size_mb": "1"},
+            {"average_asset_size_mb": "0.0001"},
+            {"dna_durability_years": "10001"},
+            {"tape_durability_years": "1001"},
+            {"synthesis_decline_percent": "99.999"},
+            {"amazon_decline_percent": "99.999"},
+            {"technologies": "DNA", "amazon_put_usd_per_request": "1e308"},
+        )
+        for query in cases:
+            with self.subTest(query=query):
+                app = self.app()
+                app.query_params.update(query)
+                app.run()
+                self.assertFalse(app.exception)
+                self.assertTrue(any("shared URL" in warning.value for warning in app.warning))
+                self.assertEqual(app.session_state["committed_widgets"]["discount"], 0)
+                self.assertEqual(app.session_state["committed_widgets"]["dna_durability"], 1000)
+                self.assertEqual(len(app.get("plotly_chart")), 8)
+
+    def test_sensitivity_overflow_keeps_the_submitted_scenario_and_other_charts(self):
+        app = self.app().run()
+        app.number_input(key="dna_cost_base_year").set_value(2050)
+        app.number_input(key="synthesis_decline").set_value(70)
+        app.button(key="calculate_header").click().run()
+        self.assertFalse(app.exception)
+        self.assertEqual(app.session_state["committed_widgets"]["dna_cost_base_year"], 2050)
+        self.assertTrue(any("Sensitivity bars omitted" in warning.value for warning in app.warning))
+        self.assertEqual(len(app.get("plotly_chart")), 8)
+
+    def test_break_even_underflow_shows_numeric_warning_and_keeps_other_charts(self):
+        app = self.app()
+        app.query_params.update({"start_year": "2400", "synthesis_decline_percent": "90", "sequencing_decline_percent": "90"})
+        app.run()
+        self.assertFalse(app.exception)
+        self.assertTrue(any("Break-even prices unavailable" in warning.value for warning in app.warning))
+        self.assertEqual(len(app.get("plotly_chart")), 7)
+        self.assertFalse(any("Not reachable" in element.value for element in app.markdown))
+
+    def test_uncertainty_overflow_keeps_the_lifecycle_chart(self):
+        app = self.app()
+        app.query_params.update({"dna_cost_base_year": "2100", "synthesis_decline_percent": "90"})
+        app.run()
+        self.assertFalse(app.exception)
+        app.checkbox(key="show_uncertainty_band").set_value(True).run()
+        self.assertFalse(app.exception)
+        self.assertTrue(any("Uncertainty band unavailable" in warning.value for warning in app.warning))
+        self.assertEqual(len(app.tabs[0].get("plotly_chart")), 2)
+
+    def test_website_requests_logical_mb_history_without_changing_raw_notebook_data(self):
+        from economic_dna.historical import load_observed_sequencing_costs
+        import streamlit as st
+        st.cache_data.clear()
+        with patch("economic_dna.load_observed_sequencing_costs", wraps=load_observed_sequencing_costs) as loader:
+            app = self.app().run()
+        self.assertFalse(app.exception)
+        loader.assert_called_once_with(logical_mb=True)
 
     def test_invalid_display_parameter_falls_back(self):
         app = self.app()

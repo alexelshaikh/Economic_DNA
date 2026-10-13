@@ -1,6 +1,9 @@
 import math
 import unittest
 
+import numpy as np
+import pandas as pd
+
 from economic_dna import (
     Scenario,
     dna_cost_sensitivity,
@@ -24,6 +27,7 @@ from economic_dna.visualization import (
     projection_chart,
     sensitivity_chart,
 )
+from economic_dna.historical import SEQUENCING_HISTORY_CSV
 
 
 class HistoricalOverlayChartTests(unittest.TestCase):
@@ -48,13 +52,20 @@ class HistoricalOverlayChartTests(unittest.TestCase):
     def test_observed_markers_use_the_real_nhgri_data(self):
         scenario = Scenario(horizon_years=5)
         costs = simulate_dna_unit_costs(scenario, 2030)
-        observed = load_observed_sequencing_costs()
+        observed = load_observed_sequencing_costs(logical_mb=True)
         figure = dna_unit_cost_chart(
             costs, "sequencing_cost_usd_per_mb", "Sequencing", "#1f77b4", True, observed=observed
         )
         observed_trace = next(t for t in figure.data if t.name == "Observed (NHGRI)")
         self.assertEqual(observed_trace.mode, "markers")
         self.assertEqual(len(observed_trace.x), len(observed))
+        raw = pd.read_csv(SEQUENCING_HISTORY_CSV, parse_dates=["Date"]).sort_values("Date")
+        # Four DNA bases encode one byte in the model, hence four million
+        # bases per logical MB. Assert against the source data, not the loader.
+        np.testing.assert_allclose(observed_trace.y, raw["Cost per Mb"] * 4)
+        np.testing.assert_allclose(
+            load_observed_sequencing_costs()["sequencing_cost_usd_per_mb"], raw["Cost per Mb"]
+        )
 
 
 class LifecycleOverlayChartTests(unittest.TestCase):
@@ -77,6 +88,7 @@ class LifecycleOverlayChartTests(unittest.TestCase):
             dna_synthesis_cost_per_mb=0.0001,
             annual_retrieval_percent=0.0,
             horizon_years=5000,
+            tape_hardware_decline_percent=0.0,
         )
         result = simulate_scenario(scenario)
         crossovers = find_lifecycle_crossovers(result, False)

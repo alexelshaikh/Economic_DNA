@@ -56,7 +56,7 @@ class LifecycleCrossoverTests(unittest.TestCase):
     def test_finds_a_year_when_a_flat_technology_is_eventually_overtaken(self):
         # DNA's cost within one scenario is essentially flat (one synthesis
         # write, no replacement inside the horizon); Tape's hardware line
-        # item has 0% decline by default, so its cumulative cost grows
+        # item is held at 0% decline here, so its cumulative cost grows
         # without bound. Given a long enough horizon it must cross a flat
         # line eventually -- this is the one case where a within-lifetime
         # crossover is reachable without contrived inputs.
@@ -65,6 +65,7 @@ class LifecycleCrossoverTests(unittest.TestCase):
             dna_synthesis_cost_per_mb=0.0001,
             annual_retrieval_percent=0.0,
             horizon_years=5000,
+            tape_hardware_decline_percent=0.0,
         )
         result = simulate_scenario(scenario)
         crossovers = find_lifecycle_crossovers(result, use_present_value=False)

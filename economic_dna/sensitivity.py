@@ -6,6 +6,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import math
 
+import numpy as np
 import pandas as pd
 
 from .scenario import Scenario
@@ -55,8 +56,12 @@ def _perturbed_value(base: float, sign: int, spec: SensitivityParameter) -> floa
 
 
 def _dna_cost(scenario: Scenario, use_present_value: bool) -> float:
-    coefficient, fixed = _dna_synthesis_linear_terms(scenario, use_present_value)
-    return coefficient * scenario.dna_synthesis_cost_per_mb + fixed
+    with np.errstate(over="raise", invalid="raise"):
+        coefficient, fixed = _dna_synthesis_linear_terms(scenario, use_present_value)
+        cost = coefficient * scenario.dna_synthesis_cost_per_mb + fixed
+    if not math.isfinite(cost):
+        raise ValueError("The sensitivity cost exceeds the numeric range.")
+    return cost
 
 
 def _bounded_value(scenario: Scenario, spec: SensitivityParameter, sign: int) -> float | int:
@@ -81,18 +86,29 @@ def dna_cost_sensitivity(
 ) -> pd.DataFrame:
     """For each parameter, hold everything else fixed and re-simulate at a
     lowered and a raised value. `swing` is the resulting spread in DNA's
-    lifecycle cost, the standard tornado-chart sort key."""
+    lifecycle cost, the standard tornado-chart sort key. Unrepresentable
+    perturbations are NaN, so they cannot be mistaken for zero-effect bars.
+    """
     if "DNA" not in scenario.technologies:
         return pd.DataFrame(columns=SENSITIVITY_COLUMNS)
 
-    baseline = _dna_cost(scenario, use_present_value)
+    try:
+        baseline = _dna_cost(scenario, use_present_value)
+    except (FloatingPointError, OverflowError) as error:
+        raise ValueError("The sensitivity cost exceeds the numeric range.") from error
+
+    def perturbed_cost(field: str, value: float | int) -> float:
+        try:
+            return _dna_cost(replace(scenario, **{field: value}), use_present_value)
+        except (ValueError, FloatingPointError, OverflowError):
+            return math.nan
 
     rows = []
     for spec in parameters:
         low_value = _bounded_value(scenario, spec, -1)
         high_value = _bounded_value(scenario, spec, 1)
-        low_cost = _dna_cost(replace(scenario, **{spec.field: low_value}), use_present_value)
-        high_cost = _dna_cost(replace(scenario, **{spec.field: high_value}), use_present_value)
+        low_cost = perturbed_cost(spec.field, low_value)
+        high_cost = perturbed_cost(spec.field, high_value)
         rows.append(
             {
                 "parameter": spec.label,

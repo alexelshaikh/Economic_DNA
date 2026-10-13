@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import json
+import math
 from pathlib import Path
 import pandas as pd
 import streamlit as st
@@ -348,6 +349,21 @@ WIDGET_KEYS = [
 ]
 
 
+# These display limits are narrower than the reusable model's limits.
+# Validate shared links against the same bounds used to create the widgets.
+WIDGET_NUMBER_LIMITS = {
+    "archive_value": (0.001, None),
+    "asset_value": (0.001, None),
+    "discount": (0.0, 99.0),
+    "dna_durability": (1, 10_000),
+    "tape_durability": (1, 1_000),
+    **{key: (0.0, 99.99) for key in (
+        "synthesis_decline", "sequencing_decline", "amazon_decline", "azure_decline",
+        "tape_media_decline", "tape_hardware_decline", "tape_energy_decline", "custom_decline",
+    )},
+}
+
+
 def _default_projection_end(scenario: Scenario, query: dict[str, str]) -> int:
     try:
         final_year = int(query.get("projection_end", 2350))
@@ -363,6 +379,13 @@ def _query_mapping() -> dict[str, str]:
 def _initial_scenario() -> Scenario:
     try:
         scenario = Scenario.from_mapping(_query_mapping())
+        widgets = _widget_state_from_scenario(scenario)
+        for key, value in widgets.items():
+            if isinstance(value, (int, float)) and not math.isfinite(value):
+                raise ValueError(f"{key} is outside the display range")
+        for key, (minimum, maximum) in WIDGET_NUMBER_LIMITS.items():
+            if widgets[key] < minimum or maximum is not None and widgets[key] > maximum:
+                raise ValueError(f"{key} is outside the display range")
         _cached_simulation(scenario)
         return scenario
     except (TypeError, ValueError, OverflowError):
@@ -804,7 +827,7 @@ def _cached_synthesis_history(base_year: int) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False, max_entries=1)
 def _cached_observed_sequencing_costs() -> pd.DataFrame:
-    return load_observed_sequencing_costs()
+    return load_observed_sequencing_costs(logical_mb=True)
 
 
 initial = _initial_scenario()
@@ -880,6 +903,8 @@ widget_defaults = st.session_state.setdefault("widget_defaults", initial_widgets
 def _scenario_number_input(label: str, *, key: str, **kwargs) -> int | float:
     if key in NUMBER_INPUT_FORMATS:
         kwargs.setdefault("format", NUMBER_INPUT_FORMATS[key])
+    if key in WIDGET_NUMBER_LIMITS:
+        kwargs["min_value"], kwargs["max_value"] = WIDGET_NUMBER_LIMITS[key]
     return st.number_input(label, key=key, value=widget_defaults[key], **kwargs)
 
 
@@ -938,7 +963,6 @@ with st.sidebar:
             with col_a:
                 archive_input = _scenario_number_input(
                     "Archive size",
-                    min_value=0.001,
                     key="archive_value",
                     help="Total logical data stored in the collection, before DNA coding, redundancy, or provider replication.",
                 )
@@ -953,7 +977,6 @@ with st.sidebar:
             with col_a:
                 asset_input = _scenario_number_input(
                     "Average asset size",
-                    min_value=0.001,
                     key="asset_value",
                     help="Average data object size. It determines object count.",
                 )
@@ -986,7 +1009,7 @@ with st.sidebar:
                 )
             with finance_col_b:
                 discount = _scenario_number_input(
-                    "Discount rate (%)", min_value=0.0, max_value=99.0,
+                    "Discount rate (%)",
                     step=0.25, key="discount",
                     help=(
                         "Annual real discount rate for present-value results. "
@@ -1187,18 +1210,18 @@ with _scenario_container("cost-panel"):
         )
         _render_order_of_magnitude_steppers("dna_sequencing_cost")
         synthesis_decline = _scenario_number_input(
-            "Synthesis annual decline (%)", min_value=0.0, max_value=99.99,
+            "Synthesis annual decline (%)",
             key="synthesis_decline",
             help="Percentage by which synthesis cost is assumed to fall each calendar year.",
         )
         sequencing_decline = _scenario_number_input(
-            "Sequencing annual decline (%)", min_value=0.0, max_value=99.99,
+            "Sequencing annual decline (%)",
             key="sequencing_decline",
             help="Percentage by which sequencing cost is assumed to fall each calendar year.",
         )
         with st.container(key="advanced-dna_durability"):
             dna_durability = _scenario_number_input(
-                "DNA durability (years)", min_value=1, max_value=10_000,
+                "DNA durability (years)",
                 key="dna_durability",
                 help="Years before the archive must be synthesized again. No replacement occurs at the exact end of the horizon.",
             )
@@ -1213,7 +1236,7 @@ with _scenario_container("cost-panel"):
                 help="Calendar year to which all Amazon prices below apply.",
             )
         amazon_decline = _scenario_number_input(
-            "Amazon annual price decline (%)", min_value=0.0, max_value=99.99,
+            "Amazon annual price decline (%)",
             key="amazon_decline",
             help="Annual reduction applied to Amazon request, retrieval, and storage prices.",
         )
@@ -1253,7 +1276,7 @@ with _scenario_container("cost-panel"):
                 help="Calendar year to which all Azure prices below apply.",
             )
         azure_decline = _scenario_number_input(
-            "Azure annual price decline (%)", min_value=0.0, max_value=99.99,
+            "Azure annual price decline (%)",
             key="azure_decline",
             help="Annual reduction applied to Azure request, retrieval, and storage prices.",
         )
@@ -1293,7 +1316,7 @@ with _scenario_container("cost-panel"):
                 help="Calendar year to which the tape media, hardware, and energy prices apply.",
             )
             tape_durability = _scenario_number_input(
-                "Tape durability (years)", min_value=1, max_value=1_000,
+                "Tape durability (years)",
                 key="tape_durability",
                 help="Years between complete tape media replacement writes.",
             )
@@ -1329,17 +1352,17 @@ with _scenario_container("cost-panel"):
         )
         st.caption("Annual price declines")
         tape_media_decline = _scenario_number_input(
-            "Tape cartridge decline (%)", min_value=0.0, max_value=99.99,
+            "Tape cartridge decline (%)",
             key="tape_media_decline",
             help="Annual reduction applied to tape cartridge/media purchase prices.",
         )
         tape_hardware_decline = _scenario_number_input(
-            "Tape library/drives decline (%)", min_value=0.0, max_value=99.99,
+            "Tape library/drives decline (%)",
             key="tape_hardware_decline",
             help="Annual reduction applied to amortized tape library, drive, and robotics costs.",
         )
         tape_energy_decline = _scenario_number_input(
-            "Tape energy decline (%)", min_value=0.0, max_value=99.99,
+            "Tape energy decline (%)",
             key="tape_energy_decline",
             help="Annual reduction applied to tape energy costs.",
         )
@@ -1381,7 +1404,7 @@ with _scenario_container("cost-panel"):
             help="Per-file or per-object charge for the expected assets retrieved each year.",
         )
         custom_decline = _scenario_number_input(
-            "Annual price decline (%)", min_value=0.0, max_value=99.99,
+            "Annual price decline (%)",
             key="custom_decline",
             help="Annual percentage reduction applied to every custom price.",
         )
@@ -1561,9 +1584,12 @@ def _render_analysis() -> None:
                     "decline rates +/-30% around your chosen values, everything else held fixed.",
                 )
             )
-            dna_uncertainty = (
-                _cached_uncertainty_band(scenario, use_present_value) if show_uncertainty else None
-            )
+            dna_uncertainty = None
+            if show_uncertainty:
+                try:
+                    dna_uncertainty = _cached_uncertainty_band(scenario, use_present_value)
+                except ValueError as error:
+                    st.warning(f"Uncertainty band unavailable: {error}")
             lifecycle_crossovers = find_lifecycle_crossovers(result, use_present_value)
             lifecycle_figure = lifecycle_chart(
                 result,
@@ -1675,7 +1701,7 @@ def _render_analysis() -> None:
                 on_change=_remember_chart_option,
                 args=("show_dna_history",),
                 help="Synthesis: the paper's fitted historical trend back to 2000. Sequencing: "
-                "NHGRI's measured cost per Mb, 2001-2022.",
+                "NHGRI's measured costs, 2001-2022, converted to USD per logical MB.",
             )
             synthesis_history = (
                 _cached_synthesis_history(scenario.dna_cost_base_year) if show_history else None
@@ -1731,7 +1757,8 @@ def _render_analysis() -> None:
                 st.caption(
                     "Modeled cost to sequence and retrieve 1 MB of logical data. "
                     "It is applied to the share of the archive retrieved each year. Observed "
-                    "markers are NHGRI's reported nominal-USD cost per Mb at each date, not "
+                    "markers convert NHGRI's nominal-USD cost per million DNA bases to cost per "
+                    "logical MB using the model's bases-per-byte assumption. They are not "
                     "inflation- or PPP-adjusted."
                 )
                 sequencing_data = dna_costs[["year", "sequencing_cost_usd_per_mb"]]
@@ -1883,10 +1910,14 @@ def _render_analysis() -> None:
             if "DNA" not in scenario.technologies:
                 st.info("Select DNA to see its break-even price and cost sensitivity.")
             else:
-                breakeven_frame = _cached_breakeven(scenario, use_present_value)
-                if breakeven_frame.empty:
+                try:
+                    breakeven_frame = _cached_breakeven(scenario, use_present_value)
+                except ValueError as error:
+                    st.warning(f"Break-even prices unavailable: {error}")
+                    breakeven_frame = pd.DataFrame()
+                if breakeven_frame.empty and len(scenario.technologies) == 1:
                     st.info("Select at least one comparison technology to calculate a break-even price.")
-                else:
+                elif not breakeven_frame.empty:
                     breakeven_figure = breakeven_chart(
                         breakeven_frame, scenario.dna_synthesis_cost_per_mb, theme=theme
                     )
@@ -1947,7 +1978,17 @@ def _render_analysis() -> None:
                     """,
                     unsafe_allow_html=True,
                 )
-                sensitivity_frame = _cached_sensitivity(scenario, use_present_value)
+                try:
+                    sensitivity_frame = _cached_sensitivity(scenario, use_present_value)
+                except ValueError as error:
+                    st.warning(f"Cost sensitivity unavailable: {error}")
+                    return
+                unavailable = sensitivity_frame[sensitivity_frame[["low_cost", "high_cost"]].isna().any(axis=1)]
+                if not unavailable.empty:
+                    st.warning(
+                        "Sensitivity bars omitted because a perturbed cost is outside the numeric range: "
+                        + ", ".join(unavailable["parameter"]) + ". Other results remain available."
+                    )
                 sensitivity_figure = sensitivity_chart(sensitivity_frame, use_present_value, theme=theme)
                 _render_chart(
                     sensitivity_figure,
